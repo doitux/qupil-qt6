@@ -1,0 +1,7 @@
+Qupil developer snapshot
+Source: /home/doitux/Projekte/qt-c++/Qupil-Mobile/qupil-build-env/source/qupil-mobile-ci-ready
+Created: 2026-09-20T22:08:50+02:00
+Version: 1.5.28
+Qt toolchain: 6.11.2
+Android build tools: 36.0.0
+Android NDK: 27.2.12479018

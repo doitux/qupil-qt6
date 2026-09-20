@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Qupil">
+  <rect width="128" height="128" rx="16" fill="#3d84a8"/>
+  <g fill="#eff0f1" stroke="#eff0f1">
+    <circle cx="47.5" cy="53.5" r="16.3" stroke="none"/>
+    <circle cx="81" cy="36.5" r="16.4" stroke="none"/>
+    <path d="M22 104 C22 88.7 33.1 78 47.3 78 C61.4 78 72.5 88.7 72.5 104 Z"
+          fill="none" stroke-width="6" stroke-linejoin="miter"/>
+    <path d="M70 63 C73.7 61.2 77.3 60.5 81.5 60.5 C94.6 60.5 105 72.2 105 87.8 L84 87.8"
+          fill="none" stroke-width="6" stroke-linejoin="miter"/>
+  </g>
+</svg>

@@ -1,0 +1,62 @@
+08.07.2019 - Version 1.4.1:
+    - Enhancement: Start / stop metronome via space bar #16
+    - Bugfix: Sql errors when handling quotation marks in texts #5
+    - Bugfix: Concert manager translation missing #15
+    - Bugfix: Reminder translation bug #14
+
+06.06.2019 - Version 1.4:
+    - Feature: Multi-language support - english interface #4
+    - Feature: Language selectable via settings #9
+    - Feature: Option to limit the displayed music pieces #12
+    - Feature: Option to limit the displayed lesson notes number #11
+    - Enhancement: Automatically switch lesson note date during day change #8
+    - Enhancement: Bad sqlite performance in current qt5 versions #7
+    - Enhancement: Too small font sizes on high dpi screens #3
+    - Bugfix: Editing in pieces loses selection and jump to top of the table #6
+    - Bugfix: Refreshed tables shows internal ids #2
+    - Bugfix: Crash when closing concert manager #1
+
+12.10.2011 - Version 1.3:
+  - New feature: In the overview of the pre-play pieces, you can now filter the pieces by class
+  - New function: Right-click on a "Vorspielkandidaten" offers the function for the automatic entry of a reminder for a Vorspielteilnahme
+  - Improvement: The Metronome / Tuner window is now more independent of the Qupil main window and no longer blocks it
+  - Improvement: If a reminder is displayed for a special student, you can tick the reminder with "done" directly in the dialog box and delete it automatically
+  - Improvement: When exporting documents to PDF of foreplay messages, a file name such as "GeneralPrevention_Presentation_2011-09-09.pdf" is automatically suggested
+  - Improvement: If the program is started in the current classroom, the memories of the current lesson will still be displayed
+  - Bug fix: In the timetable document some pupils did not have the names of each other <- fixed!
+  - Bugfix: A false dialog was displayed in the event manager during the document export PDF <- fixed!
+  - Bug fix: Reminders of two students in a group lesson will now really be displayed separately
+  - Bug fix: In the student archive, subsequently entered lesson notes are now displayed in the right place and not at the very end of the list.
+
+08.02.2010 - Version 1.2:
+  - New feature: Ensemble candidates (displays the students who should actually play in ensembles but are not currently active in any ensemble)
+  - New function: Reminders (depending on various events such as program start, at the beginning of each lesson or at a specific student message can be displayed and on request acoustically signaled)
+  - New function: daily overview (creates a document which lists the lesson units for the specified weekday incl. The last lesson notes and a blank field for handwritten notes)
+  - Improvement: Lesson notes can now be written in multiple lines and with formatted text
+  - Improvement: For regular activities now also the type can be saved (for example ensemble)
+
+21.01.2010 - Version 1.1:
+  - New function: Event manager (for example, administration of audition programs) including archive function
+  - New feature: Automatic entries in "Works" and activities for all students who participated in events
+  - New function: Estimated total duration of events is calculated using individually adjustable time factors
+  - New function: Program list for events with PDF export and print option
+  - New function: Timetable document with PDF export and print option
+  - New function: Presumption candidate (displays the students whose last foreplay is already longer than the individually set foreplay interval)
+  - Improvement: At the start of the program the selection no longer jumps to the current lesson but to the first student of the current lesson
+  - Improvement: New minimum window size fits better to netbook screen resolutions
+  - Bug fix: several "ready to play" works for a group are now displayed correctly in the play manager overview
+  - Bugfix: Crash on systems without soundcard fixed
+
+14.12.2008 - Version 1.0.2:
+  - Improvement: CSV address book import (automatic separator detection, different file codes possible)
+  - Improvement: Works -> Status on "Completed" sets end date automatically
+  - Bug fix: Quotes in Classroom Notes, Works and Grade Library now work
+  - Bug fix: Crash when emptying the classroom, instrument, size lists in settings fixed
+  - Bugfix: Date formatting in the music library now in German
+
+28.08.2008 - Version 1.0.1:
+  - Fixed a bug under Windows
+  - Fixed typos in the main window
+
+15.08.2008 - Version 1.0:
+  - Complete rewrite of Qupil 0.3.2

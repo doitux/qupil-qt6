@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Qupil
+GenericName=Lesson Management
+GenericName[de]=Unterrichtsmanagement
+Comment=Pupils and lesson manager for instrumental teachers
+Comment[de]=Schüler- und Unterrichtsmanagement für Instrumentalpädagogen
+Exec=qupil
+Icon=qupil
+Terminal=false
+Type=Application
+Categories=Qt;Office;
+StartupNotify=true

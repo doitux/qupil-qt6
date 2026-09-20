@@ -1,0 +1,21 @@
+# Qt / CMake build output
+/build/
+/build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+
+# IDE and OS generated files
+.DS_Store
+*.user
+*.user.*
+
+# --- Local Qupil development state ---
+CMakeLists.txt.user*
+*.user
+*.user.*
+.qmlcache/
+.cache/
+.DS_Store
+# Build directories live outside this repository in ../qupil-build-env/build/.

@@ -1,0 +1,21 @@
+Requirements
+============
+
+To compile Qupil you need following libs: 
+
+Linux:
+- Qt version >= 5.0 --> https://www.qt.io/
+- Qt Multimedia (part of the selected Qt installation)
+
+Basic Installation
+==================
+
+Linux:
+
+  1. Type "cd path/to/the/sources". Then do for example "qmake qupil.pro" to configure the makefile for your system.
+
+  2. Type "make" to compile the package.
+
+  3. Become root (typing "su") and type "make install" to install the program binary.
+
+Database support uses Qt SQL with the QSQLITE driver shipped with Qt; no direct sqlite3 development package is required by Qupil.

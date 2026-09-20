@@ -1,0 +1,403 @@
+Qupil German translation coverage v26
+
+Messages: 409
+Word fallback: 0
+Unfinished: 0
+Numerus entries: 1 (2 German forms)
+
+curated: 223
+curated-numerus: 2
+original-exact: 135
+original-normalized: 27
+
+Complete context :: source -> German catalog:
+  AppController :: Address -> Adresse
+  AppController :: An individual lesson can only contain one pupil. -> Ein Einzelunterricht kann nur einen Schüler enthalten.
+  AppController :: At application start -> Beim Programmstart
+  AppController :: Author, title and publisher are required. -> Autor, Titel und Verlag sind erforderlich.
+  AppController :: Birthday -> Geburtstag
+  AppController :: Cello -> Cello
+  AppController :: Composer -> Komponist
+  AppController :: Composer and title are required. -> Komponist und Titel sind erforderlich.
+  AppController :: Concerto -> Konzert
+  AppController :: Could not create a temporary restore file. -> Temporäre Datei für die Wiederherstellung konnte nicht erstellt werden.
+  AppController :: Could not open CSV file: %1 -> CSV-Datei konnte nicht geöffnet werden: %1
+  AppController :: Could not read backup: %1 -> Backup konnte nicht gelesen werden: %1
+  AppController :: Could not write backup: %1 -> Backup konnte nicht geschrieben werden: %1
+  AppController :: Date -> Datum
+  AppController :: Done -> Erledigt
+  AppController :: Double bass -> Kontrabass
+  AppController :: E-mail -> E-Mail
+  AppController :: Ensemble lesson -> Ensembleunterricht
+  AppController :: Etude -> Etüde
+  AppController :: Every lesson -> Bei jedem Unterricht
+  AppController :: Finished -> Beendet
+  AppController :: First lesson -> Erster Unterricht
+  AppController :: Friday -> Freitag
+  AppController :: Group lesson -> Gruppenunterricht
+  AppController :: Home -> Privat
+  AppController :: In progress -> In Arbeit
+  AppController :: Individual lesson -> Einzelunterricht
+  AppController :: Instrument -> Instrument
+  AppController :: Instrument size -> Instrumentengröße
+  AppController :: Irregular -> Unregelmäßig
+  AppController :: Lesson -> Unterricht
+  AppController :: Lesson %1 ends in %n minute(s). -> Unterricht %1 endet in %n Minute.
+  AppController :: Lesson %1 ends in %n minute(s). -> Unterricht %1 endet in %n Minuten.
+  AppController :: Lesson notes -> Unterrichtsnotizen
+  AppController :: Mobile -> Handy
+  AppController :: Monday -> Montag
+  AppController :: Music pieces -> Werke
+  AppController :: Music school -> Musikschule
+  AppController :: New lesson -> Neuer Unterricht
+  AppController :: No backup destination was selected. -> Kein Ziel für das Backup ausgewählt.
+  AppController :: No backup file was selected. -> Keine Backupdatei ausgewählt.
+  AppController :: Note -> Notiz
+  AppController :: Notes -> Notizen
+  AppController :: Other -> Sonstiges
+  AppController :: Paused -> Pause
+  AppController :: Personal data -> Persönliche Daten
+  AppController :: Phone -> Telefon
+  AppController :: Piano -> Klavier
+  AppController :: Planned -> Geplant
+  AppController :: Pupil not found. -> Schüler nicht gefunden.
+  AppController :: Ready for concert -> Vorspielreif
+  AppController :: Regular -> Regelmäßig
+  AppController :: Reminder -> Erinnerung
+  AppController :: Reminder text must not be empty. -> Erinnerungstext darf nicht leer sein.
+  AppController :: Saturday -> Samstag
+  AppController :: Sonata -> Sonate
+  AppController :: Specific pupil -> Bestimmter Schüler
+  AppController :: State -> Status
+  AppController :: Sunday -> Sonntag
+  AppController :: The CSV file has no data rows. -> Die CSV-Datei enthält keine Datenzeilen.
+  AppController :: The CSV file is empty. -> Die CSV-Datei ist leer.
+  AppController :: The lesson has no active pupils. -> Der Unterricht hat keine aktiven Schüler.
+  AppController :: The selected lesson membership no longer exists. -> Die ausgewählte Unterrichtszuordnung existiert nicht mehr.
+  AppController :: Thursday -> Donnerstag
+  AppController :: Title -> Titel
+  AppController :: Title is required. -> Titel ist erforderlich.
+  AppController :: Tuesday -> Dienstag
+  AppController :: Tune -> Stimmen
+  AppController :: Unknown -> Unbekannt
+  AppController :: Viola -> Viola
+  AppController :: Violin -> Violine
+  AppController :: Wednesday -> Mittwoch
+  ArchivePage :: Archive -> Archiv
+  ArchivePage :: Archive is empty -> Das Archiv ist leer
+  ArchivePage :: Archived pupil -> Archivierter Schüler
+  ArchivePage :: Delete archive entry? -> Archiveintrag löschen?
+  ArchivePage :: Delete entry -> Eintrag löschen
+  CsvImportPage :: %1 data rows · separator '%2' -> %1 Datenzeilen · Trennzeichen '%2'
+  CsvImportPage :: %1 pupils imported -> %1 Schüler importiert
+  CsvImportPage :: All files (*) -> Alle Dateien (*)
+  CsvImportPage :: Back -> Zurück
+  CsvImportPage :: Birthday -> Geburtstag
+  CsvImportPage :: Choose CSV… -> CSV auswählen…
+  CsvImportPage :: City -> Ort
+  CsvImportPage :: CSV address-book import -> CSV-Adressbuchimport
+  CsvImportPage :: CSV files (*.csv) -> CSV-Dateien (*.csv)
+  CsvImportPage :: Do not import -> Nicht importieren
+  CsvImportPage :: Done -> Erledigt
+  CsvImportPage :: E-mail -> E-Mail
+  CsvImportPage :: Field mapping -> Feldzuordnung
+  CsvImportPage :: First name -> Vorname
+  CsvImportPage :: Import -> Importieren
+  CsvImportPage :: Last name -> Nachname
+  CsvImportPage :: Mobile -> Handy
+  CsvImportPage :: No file selected -> Keine Datei ausgewählt
+  CsvImportPage :: Open address CSV -> Adress-CSV öffnen
+  CsvImportPage :: Phone -> Telefon
+  CsvImportPage :: Preview -> Vorschau
+  CsvImportPage :: Street -> Straße
+  CsvImportPage :: Zip code -> Postleitzahl
+  DashboardPage :: Events -> Veranstaltungen
+  DashboardPage :: Lessons -> Unterricht
+  DashboardPage :: Loaned scores -> Ausgeliehene Noten
+  DashboardPage :: No regular lessons are scheduled for today. -> Für heute ist kein regelmäßiger Unterricht geplant.
+  DashboardPage :: Pupils -> Schüler
+  DashboardPage :: Reminders -> Erinnerungen
+  DashboardPage :: Today -> Heute
+  DashboardPage :: Total -> Gesamt
+  DashboardPage :: Today's lessons -> Heutiger Unterricht
+  EmptyState :: Nothing here yet -> Noch nichts vorhanden
+  LessonDetailPage :: Add -> Hinzufügen
+  LessonDetailPage :: Back -> Zurück
+  LessonDetailPage :: Create name automatically -> Namen automatisch erstellen
+  LessonDetailPage :: Delete lesson -> Unterricht löschen
+  LessonDetailPage :: Delete lesson? -> Unterricht löschen?
+  LessonDetailPage :: End (HH:mm) -> Ende (HH:mm)
+  LessonDetailPage :: Ensemble lesson -> Ensembleunterricht
+  LessonDetailPage :: Friday -> Freitag
+  LessonDetailPage :: Group lesson -> Gruppenunterricht
+  LessonDetailPage :: Historical pupil assignments are preserved where appropriate. -> Historische Schülerzuordnungen bleiben, soweit erforderlich, erhalten.
+  LessonDetailPage :: Individual lesson -> Einzelunterricht
+  LessonDetailPage :: Irregular lesson -> Unregelmäßiger Unterricht
+  LessonDetailPage :: Lesson details -> Unterrichtsdetails
+  LessonDetailPage :: Lesson name -> Unterrichtsbezeichnung
+  LessonDetailPage :: Location -> Ort
+  LessonDetailPage :: Monday -> Montag
+  LessonDetailPage :: New lesson -> Neuer Unterricht
+  LessonDetailPage :: No pupils assigned yet. -> Noch keine Schüler zugeordnet.
+  LessonDetailPage :: Pupils -> Schüler
+  LessonDetailPage :: Remove -> Entfernen
+  LessonDetailPage :: Saturday -> Samstag
+  LessonDetailPage :: Save -> Speichern
+  LessonDetailPage :: Saved -> Gespeichert
+  LessonDetailPage :: Start (HH:mm) -> Beginn (HH:mm)
+  LessonDetailPage :: Sunday -> Sonntag
+  LessonDetailPage :: Thursday -> Donnerstag
+  LessonDetailPage :: Tuesday -> Dienstag
+  LessonDetailPage :: Type -> Typ
+  LessonDetailPage :: Wednesday -> Mittwoch
+  LessonDetailPage :: Weekday -> Wochentag
+  LessonsPage :: Active lessons -> Aktiver Unterricht
+  LessonsPage :: Add -> Hinzufügen
+  LibraryPage :: Add -> Hinzufügen
+  LibraryPage :: Add music -> Noten hinzufügen
+  LibraryPage :: available -> verfügbar
+  LibraryPage :: Composer / author -> Komponist / Autor
+  LibraryPage :: Loan -> Ausleihen
+  LibraryPage :: Loan music -> Noten ausleihen
+  LibraryPage :: loaned to %1 -> ausgeliehen an %1
+  LibraryPage :: Publisher -> Verlag
+  LibraryPage :: Pupil -> Schüler
+  LibraryPage :: Return -> Zurückgeben
+  LibraryPage :: Title -> Titel
+  Main :: Checks & reports -> Werkzeuge
+  Main :: CSV import -> CSV-Import
+  Main :: Database: %1 -> Datenbank: %1
+  Main :: Dismiss -> Schließen
+  Main :: Done – remove reminder -> Erledigt – Erinnerung entfernen
+  Main :: Event -> Veranstaltung
+  Main :: Events -> Veranstaltungen
+  Main :: Lesson -> Unterricht
+  Main :: Lesson ending soon -> Unterricht endet bald
+  Main :: Lessons -> Unterricht
+  Main :: Metronome -> Metronom
+  Main :: Music library -> Noten-Bibliothek
+  Main :: New event -> Neue Veranstaltung
+  Main :: New lesson -> Neuer Unterricht
+  Main :: New pupil -> Neuer Schüler
+  Main :: OK -> OK
+  Main :: Overview -> Tagesübersicht
+  Main :: Pupil -> Schüler
+  Main :: Pupil archive -> Schülerarchiv
+  Main :: Pupils -> Schüler
+  Main :: Qupil -> Qupil
+  Main :: Refresh -> Aktualisieren
+  Main :: Reminder -> Erinnerung
+  Main :: Reminder for %1 -> Erinnerung für %1
+  Main :: Reminders -> Erinnerungen
+  Main :: Schedule -> Stundenplan
+  Main :: Settings -> Einstellungen
+  MetronomePage :: Beats per bar -> Schläge pro Takt
+  MetronomePage :: Hz -> Hz
+  MetronomePage :: Metronome -> Metronom
+  MetronomePage :: Play tone -> Stimmton abspielen
+  MetronomePage :: Reference tone -> Referenzton
+  MetronomePage :: Start -> Start
+  MetronomePage :: Stop -> Stopp
+  MetronomePage :: Tap tempo -> Tempo tippen
+  MetronomePage :: The Qt 6 port replaces the legacy SDL audio backend with Qt Multimedia while retaining Qupil's reference-tone range of 438–445 Hz. -> Die Qt-6-Portierung ersetzt das bisherige SDL-Audio-Backend durch Qt Multimedia und behält Qupils Referenztonbereich von 438–445 Hz bei.
+  PupilDetailPage :: 1 month -> 1 Monat
+  PupilDetailPage :: 12 months -> 12 Monate
+  PupilDetailPage :: 18 months -> 18 Monate
+  PupilDetailPage :: 2 months -> 2 Monate
+  PupilDetailPage :: 24 months -> 24 Monate
+  PupilDetailPage :: 3 months -> 3 Monate
+  PupilDetailPage :: 4 months -> 4 Monate
+  PupilDetailPage :: 6 months -> 6 Monate
+  PupilDetailPage :: 9 months -> 9 Monate
+  PupilDetailPage :: A readable archive entry is created before the active pupil is removed. -> Vor dem Entfernen des aktiven Schülers wird ein lesbarer Archiveintrag erstellt.
+  PupilDetailPage :: Activities -> Aktivitäten
+  PupilDetailPage :: Add activity -> Aktivität hinzufügen
+  PupilDetailPage :: Add lesson note -> Unterrichtsnotiz hinzufügen
+  PupilDetailPage :: Add music piece -> Werk hinzufügen
+  PupilDetailPage :: Add note -> Notiz hinzufügen
+  PupilDetailPage :: Add piece -> Werk hinzufügen
+  PupilDetailPage :: Address -> Adresse
+  PupilDetailPage :: Archive -> Archiv
+  PupilDetailPage :: Archive pupil? -> Schüler archivieren?
+  PupilDetailPage :: Back -> Zurück
+  PupilDetailPage :: Birthday (YYYY-MM-DD) -> Geburtstag (YYYY-MM-DD)
+  PupilDetailPage :: Composer -> Komponist
+  PupilDetailPage :: Contact -> Kontakt
+  PupilDetailPage :: Date (YYYY-MM-DD) -> Datum (YYYY-MM-DD)
+  PupilDetailPage :: Delete -> Löschen
+  PupilDetailPage :: Delete pupil? -> Schüler löschen?
+  PupilDetailPage :: Description -> Beschreibung
+  PupilDetailPage :: Duration (minutes) -> Dauer (Minuten)
+  PupilDetailPage :: E-mail -> E-Mail
+  PupilDetailPage :: Ensemble -> Ensemble
+  PupilDetailPage :: Ensemble recital -> Ensemblemitwirkung
+  PupilDetailPage :: Father – job -> Arbeit (Vater)
+  PupilDetailPage :: Father – name -> Name (Vater)
+  PupilDetailPage :: Father – phone -> Telefon (Vater)
+  PupilDetailPage :: Finished -> Beendet
+  PupilDetailPage :: First lesson (YYYY-MM-DD) -> Erster Unterricht (YYYY-MM-DD)
+  PupilDetailPage :: First name -> Vorname
+  PupilDetailPage :: Friday -> Freitag
+  PupilDetailPage :: Genre -> Genre
+  PupilDetailPage :: In progress -> In Arbeit
+  PupilDetailPage :: Instrument -> Instrument
+  PupilDetailPage :: Inventory number -> Inventarnummer
+  PupilDetailPage :: Irregular -> Unregelmäßig
+  PupilDetailPage :: Last name -> Nachname
+  PupilDetailPage :: Loaned music -> Geliehene Noten
+  PupilDetailPage :: Mobile -> Handy
+  PupilDetailPage :: Monday -> Montag
+  PupilDetailPage :: Mother – job -> Arbeit (Mutter)
+  PupilDetailPage :: Mother – name -> Name (Mutter)
+  PupilDetailPage :: Mother – phone -> Telefon (Mutter)
+  PupilDetailPage :: Never -> Niemals
+  PupilDetailPage :: New pupil -> Neuer Schüler
+  PupilDetailPage :: Next size needed -> Nächste Größe erforderlich
+  PupilDetailPage :: No music is currently loaned to this pupil. -> An diesen Schüler sind derzeit keine Noten ausgeliehen.
+  PupilDetailPage :: Note -> Notiz
+  PupilDetailPage :: Notes -> Notizen
+  PupilDetailPage :: Other -> Sonstiges
+  PupilDetailPage :: Parents -> Eltern
+  PupilDetailPage :: Participation in ensemble expected -> Ensembleteilnahme wird erwartet
+  PupilDetailPage :: Paused -> Pause
+  PupilDetailPage :: Personal -> Persönliche Daten
+  PupilDetailPage :: Personal event interval -> Persönliches Vorspielintervall
+  PupilDetailPage :: Personal notes -> Persönliche Notizen
+  PupilDetailPage :: Phone -> Telefon
+  PupilDetailPage :: Piano coaching -> Korrepetition
+  PupilDetailPage :: Pieces -> Werke
+  PupilDetailPage :: Planned -> Geplant
+  PupilDetailPage :: Pupil has a rental instrument -> Schüler hat ein Leihinstrument
+  PupilDetailPage :: Ready for concert -> Vorspielreif
+  PupilDetailPage :: Regular activity -> Regelmäßige Aktivität
+  PupilDetailPage :: Rental instrument -> Leihinstrument
+  PupilDetailPage :: Rented since (YYYY-MM-DD) -> Geliehen seit (YYYY-MM-DD)
+  PupilDetailPage :: Return -> Zurückgeben
+  PupilDetailPage :: Saturday -> Samstag
+  PupilDetailPage :: Save -> Speichern
+  PupilDetailPage :: Saved -> Gespeichert
+  PupilDetailPage :: Size -> Größe
+  PupilDetailPage :: Solo recital -> Solo-Beitrag
+  PupilDetailPage :: Start (YYYY-MM-DD) -> Beginn (YYYY-MM-DD)
+  PupilDetailPage :: State -> Status
+  PupilDetailPage :: Sunday -> Sonntag
+  PupilDetailPage :: The pupil and linked lesson content will be deleted. -> Der Schüler und die verknüpften Unterrichtsinhalte werden gelöscht.
+  PupilDetailPage :: Theory lesson -> Theorieunterricht
+  PupilDetailPage :: Thursday -> Donnerstag
+  PupilDetailPage :: Time (HH:mm) -> Uhrzeit (HH:mm)
+  PupilDetailPage :: Title -> Titel
+  PupilDetailPage :: Tuesday -> Dienstag
+  PupilDetailPage :: Type -> Typ
+  PupilDetailPage :: Wednesday -> Mittwoch
+  PupilDetailPage :: Weekday -> Wochentag
+  PupilsPage :: Add -> Hinzufügen
+  PupilsPage :: No matching pupils -> Keine passenden Schüler
+  PupilsPage :: No pupils yet -> Noch keine Schüler
+  PupilsPage :: Search pupils… -> Schüler suchen…
+  RecitalDetailPage :: Add -> Hinzufügen
+  RecitalDetailPage :: Add external piece -> Externes Werk hinzufügen
+  RecitalDetailPage :: Add this event to pupil activities -> Diese Veranstaltung zu den Schüleraktivitäten hinzufügen
+  RecitalDetailPage :: Back -> Zurück
+  RecitalDetailPage :: Choose how Qupil should update the participating pupils. -> Wählen Sie, wie Qupil die teilnehmenden Schüler aktualisieren soll.
+  RecitalDetailPage :: Composer -> Komponist
+  RecitalDetailPage :: Date (YYYY-MM-DD) -> Datum (YYYY-MM-DD)
+  RecitalDetailPage :: Default accompanist -> Standardbegleiter
+  RecitalDetailPage :: Delete -> Löschen
+  RecitalDetailPage :: Delete event? -> Veranstaltung löschen?
+  RecitalDetailPage :: Description -> Beschreibung
+  RecitalDetailPage :: Duration (minutes) -> Dauer (Minuten)
+  RecitalDetailPage :: Event details -> Veranstaltungsdetails
+  RecitalDetailPage :: external -> extern
+  RecitalDetailPage :: External piece -> Externes Werk
+  RecitalDetailPage :: Finish event -> Veranstaltung abschließen
+  RecitalDetailPage :: Finish event… -> Veranstaltung abschließen…
+  RecitalDetailPage :: Genre -> Genre
+  RecitalDetailPage :: Location -> Ort
+  RecitalDetailPage :: Mark performed pieces as finished -> Aufgeführte Werke als abgeschlossen markieren
+  RecitalDetailPage :: Musician -> Musiker
+  RecitalDetailPage :: New event -> Neue Veranstaltung
+  RecitalDetailPage :: No pieces are currently marked ready for concert. -> Derzeit sind keine Werke als vorspielreif markiert.
+  RecitalDetailPage :: No pieces in the program yet. -> Noch keine Werke im Programm.
+  RecitalDetailPage :: Organizer -> Organisator
+  RecitalDetailPage :: Program -> Programm
+  RecitalDetailPage :: Ready for concert -> Vorspielreif
+  RecitalDetailPage :: Save -> Speichern
+  RecitalDetailPage :: Saved -> Gespeichert
+  RecitalDetailPage :: The event and its program links will be deleted. -> Die Veranstaltung und ihre Programmverknüpfungen werden gelöscht.
+  RecitalDetailPage :: Time (HH:mm) -> Uhrzeit (HH:mm)
+  RecitalDetailPage :: Title -> Titel
+  RecitalsPage :: Add -> Hinzufügen
+  RecitalsPage :: Events -> Veranstaltungen
+  RecitalsPage :: Untitled event -> Unbenannte Veranstaltung
+  RemindersPage :: Add -> Hinzufügen
+  RemindersPage :: At application start -> Beim Programmstart
+  RemindersPage :: Edit reminder -> Erinnerung bearbeiten
+  RemindersPage :: Every lesson -> Bei jedem Unterricht
+  RemindersPage :: Mode -> Modus
+  RemindersPage :: New reminder -> Neue Erinnerung
+  RemindersPage :: Play notification sound -> Erinnerungston abspielen
+  RemindersPage :: Pupil -> Schüler
+  RemindersPage :: Reminder text -> Erinnerungstext
+  RemindersPage :: Reminders -> Erinnerungen
+  RemindersPage :: Specific pupil -> Bestimmter Schüler
+  ReportsPage :: %1 days ago · %2 years -> vor %1 Tagen · %2 Jahre
+  ReportsPage :: %1 days since %2 -> %1 Tage seit %2
+  ReportsPage :: Add reminder -> Erinnerung hinzufügen
+  ReportsPage :: All requested pupils have an active ensemble activity -> Alle ausgewählten Schüler haben eine aktive Ensembleaktivität
+  ReportsPage :: Birthdays -> Geburtstage
+  ReportsPage :: Ensemble activity -> Ensembleaktivität
+  ReportsPage :: in %1 days · %2 years -> in %1 Tagen · %2 Jahre
+  ReportsPage :: Instrument overview -> Instrumentenübersicht
+  ReportsPage :: next size -> nächste Größe
+  ReportsPage :: Next size needed: %1 -> Nächste Größe erforderlich: %1
+  ReportsPage :: No overdue concert candidates -> Keine überfälligen Vorspielkandidaten
+  ReportsPage :: no previous ensemble -> keine bisherige Ensemblemitwirkung
+  ReportsPage :: No valid birthdays stored -> Keine gültigen Geburtstage gespeichert
+  ReportsPage :: Overdue concert activity -> Überfällige Vorspielaktivität
+  ReportsPage :: Reminder added -> Erinnerung hinzugefügt
+  ReportsPage :: rental -> Leihinstrument
+  ReportsPage :: Rental instruments: %1 -> Leihinstrumente: %1
+  ReportsPage :: Speak about concert activity! -> Vorspielaktivität ansprechen!
+  ReportsPage :: Speak about ensemble activity! -> Ensembleaktivität ansprechen!
+  ReportsPage :: today · %1 years -> heute · %1 Jahre
+  SchedulePage :: Fri -> Fr
+  SchedulePage :: Mon -> Mo
+  SchedulePage :: No lessons on this day -> An diesem Tag findet kein Unterricht statt.
+  SchedulePage :: No pupils -> Keine Schüler
+  SchedulePage :: Sat -> Sa
+  SchedulePage :: Sun -> So
+  SchedulePage :: Thu -> Do
+  SchedulePage :: Tue -> Di
+  SchedulePage :: Wed -> Mi
+  SettingsPage :: A legacy desktop database was copied into the new application data directory on first start. The original was left unchanged. -> Beim ersten Start wurde eine Datenbank der bisherigen Desktop-Version in das neue Anwendungsdatenverzeichnis kopiert. Das Original blieb unverändert.
+  SettingsPage :: Application -> Anwendung
+  SettingsPage :: Backup created -> Backup erstellt
+  SettingsPage :: Backup restored -> Backup zurückgespielt
+  SettingsPage :: Birthday reminder -> Geburtstagserinnerung aktivieren
+  SettingsPage :: Create backup… -> Backup erstellen…
+  SettingsPage :: Create Qupil backup -> Qupil-Backup erstellen
+  SettingsPage :: Database -> Datenbank
+  SettingsPage :: English -> Englisch
+  SettingsPage :: German -> Deutsch
+  SettingsPage :: Import pupils from CSV… -> Schüler aus CSV importieren…
+  SettingsPage :: Instrument sizes -> Instrumentengrößen
+  SettingsPage :: Instruments -> Instrumente
+  SettingsPage :: Interface language -> Sprache der Oberfläche
+  SettingsPage :: Language -> Sprache
+  SettingsPage :: Lesson end reminder -> Erinnerung zum Unterrichtsende
+  SettingsPage :: Lesson locations -> Unterrichtsorte
+  SettingsPage :: Minutes before end -> Minuten vor Ende
+  SettingsPage :: Music styles -> Stilrichtungen
+  SettingsPage :: Open Qupil backup -> Qupil-Backup öffnen
+  SettingsPage :: Qupil backup (*.db) -> Qupil-Backup (*.db)
+  SettingsPage :: Restore backup -> Backup zurückspielen
+  SettingsPage :: Restore backup… -> Backup zurückspielen…
+  SettingsPage :: Restoring replaces the current data. Qupil creates a local safety copy before the replacement. Continue? -> Beim Zurückspielen werden die aktuellen Daten ersetzt. Qupil erstellt vorher eine lokale Sicherheitskopie. Fortfahren?
+  SettingsPage :: Save settings -> Einstellungen speichern
+  SettingsPage :: Settings saved -> Einstellungen gespeichert
+  SettingsPage :: Share notes and pieces with all active pupils in the selected lesson -> Notizen und Werke für alle aktiven Schüler des ausgewählten Unterrichts gemeinsam speichern
+  SettingsPage :: System language -> Systemsprache
+
+SchedulePage :: Select a pupil from the schedule -> Schüler im Stundenplan auswählen
+SchedulePage :: Saved for all active pupils in this lesson -> Wird für alle aktiven Schüler dieses Unterrichts gespeichert
+SchedulePage :: Saved only for this pupil -> Wird nur für diesen Schüler gespeichert
