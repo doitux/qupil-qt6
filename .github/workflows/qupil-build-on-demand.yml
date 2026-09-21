@@ -451,30 +451,30 @@ jobs:
     permissions:
       contents: write
 
+    env:
+      QT_VERSION: "6.11.2"
+      IOS_DEPLOYMENT_TARGET: "17.0"
+
     steps:
-      - name: Checkout Qupil source commit
-        uses: actions/checkout@v4
+      - name: Checkout committed Qupil source
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.source_ref }}
-          submodules: recursive
 
-      - name: Record source identity
+      - name: Resolve source metadata
         shell: bash
         run: |
-          set -euxo pipefail
-
+          set -euo pipefail
           SOURCE_COMMIT="$(git rev-parse HEAD)"
           SOURCE_COMMIT_SHORT="$(git rev-parse --short=12 HEAD)"
-          SOURCE_VERSION="$(sed -nE 's/^[[:space:]]*project\(Qupil[[:space:]]+VERSION[[:space:]]+([0-9.]+).*/\1/p' CMakeLists.txt | head -n1 || true)"
-          [[ -n "$SOURCE_VERSION" ]] || SOURCE_VERSION="unknown"
-
-          test -z "$(git status --porcelain --untracked-files=normal)"
-
-          echo "QUPIL_SOURCE_COMMIT=$SOURCE_COMMIT" >> "$GITHUB_ENV"
-          echo "QUPIL_SOURCE_COMMIT_SHORT=$SOURCE_COMMIT_SHORT" >> "$GITHUB_ENV"
-          echo "QUPIL_SOURCE_VERSION=$SOURCE_VERSION" >> "$GITHUB_ENV"
-
-          echo "Qupil version: $SOURCE_VERSION"
+          PROGRAM_VERSION="$(sed -nE 's/^[[:space:]]*project\(Qupil[[:space:]]+VERSION[[:space:]]+([0-9.]+).*/\1/p' CMakeLists.txt | head -n1)"
+          [[ -n "$PROGRAM_VERSION" ]] || PROGRAM_VERSION="unknown"
+          {
+            echo "QUPIL_SOURCE_COMMIT=$SOURCE_COMMIT"
+            echo "QUPIL_SOURCE_COMMIT_SHORT=$SOURCE_COMMIT_SHORT"
+            echo "QUPIL_SOURCE_VERSION=$PROGRAM_VERSION"
+          } >> "$GITHUB_ENV"
+          echo "Qupil version: $PROGRAM_VERSION"
           echo "Source commit: $SOURCE_COMMIT"
 
       - name: Show Apple toolchain
@@ -487,408 +487,155 @@ jobs:
           xcrun --sdk iphoneos --show-sdk-version
           cmake --version
           ninja --version || true
-          python3 --version
+          gh --version
 
-      - name: Verify iOS-specific source prerequisites
+      - name: Install Qt host and iOS
         shell: bash
         run: |
           set -euxo pipefail
+          AQT_VENV="$RUNNER_TEMP/aqt-venv"
+          QT_ROOT="$RUNNER_TEMP/Qt"
+          python3 -m venv "$AQT_VENV"
+          "$AQT_VENV/bin/python" -m pip install --upgrade pip
+          "$AQT_VENV/bin/python" -m pip install 'aqtinstall==3.3.0'
 
-          python3 - <<'PY_IOS_CHECK'
-          from pathlib import Path
+          "$AQT_VENV/bin/python" -m aqt list-qt mac ios --arch "$QT_VERSION" | tee "$RUNNER_TEMP/qt-ios-arches.txt"
+          grep -Eq '(^|[[:space:]])ios([[:space:]]|$)' "$RUNNER_TEMP/qt-ios-arches.txt"
 
-          text = Path("CMakeLists.txt").read_text(encoding="utf-8")
-          required = [
-              "qt_add_ios_ffmpeg_libraries(qupil)",
-              "QT_NO_FFMPEG_XCODE_EMBED_FRAMEWORKS_CODE_SIGN_ON_COPY",
-          ]
-          missing = [item for item in required if item not in text]
-          if missing:
-              raise SystemExit(
-                  "CMakeLists.txt: iOS-FFmpeg-Einbindung fehlt: "
-                  + ", ".join(missing)
-              )
-          if text.count("qt_add_ios_ffmpeg_libraries(qupil)") != 1:
-              raise SystemExit(
-                  "CMakeLists.txt: qt_add_ios_ffmpeg_libraries(qupil) "
-                  "muss genau einmal vorkommen"
-              )
-          print("PASS: iOS Qt-Multimedia/FFmpeg-Integration vorhanden")
-          PY_IOS_CHECK
+          "$AQT_VENV/bin/python" -m aqt list-qt mac ios --modules "$QT_VERSION" ios | tee "$RUNNER_TEMP/qt-ios-modules.txt"
+          grep -Eq '(^|[[:space:]])qtmultimedia([[:space:]]|$)' "$RUNNER_TEMP/qt-ios-modules.txt"
 
-      - name: Run source validation
+          "$AQT_VENV/bin/python" -m aqt install-qt --outputdir "$QT_ROOT" --internal mac desktop "$QT_VERSION" clang_64 --modules qtmultimedia
+          "$AQT_VENV/bin/python" -m aqt install-qt --outputdir "$QT_ROOT" --internal mac ios "$QT_VERSION" ios --modules qtmultimedia
+
+          test -x "$QT_ROOT/$QT_VERSION/macos/bin/qt-cmake"
+          test -x "$QT_ROOT/$QT_VERSION/ios/bin/qt-cmake"
+
+      - name: Re-run source validation on macOS
         shell: bash
         run: |
           set -euxo pipefail
-
           for test in source_sanity.py sql_static_smoke.py i18n_static_smoke.py i18n_catalog_smoke.py; do
             if [[ -f "tests/$test" ]]; then
               python3 "tests/$test"
             fi
           done
 
-      - name: Install Qt host and Qt for iOS
-        shell: bash
-        run: |
-          set -euxo pipefail
-
-          AQT_VENV="$RUNNER_TEMP/aqt-venv"
-          QT_ROOT="$RUNNER_TEMP/Qt"
-
-          python3 -m venv "$AQT_VENV"
-          "$AQT_VENV/bin/python" -m pip install --upgrade pip
-          "$AQT_VENV/bin/python" -m pip install 'aqtinstall==3.3.0'
-
-          "$AQT_VENV/bin/python" -m aqt list-qt \
-            mac ios --arch "$IOS_QT_VERSION" \
-            | tee "$RUNNER_TEMP/qt-ios-arches.txt"
-
-          grep -Eq '(^|[[:space:]])ios([[:space:]]|$)' \
-            "$RUNNER_TEMP/qt-ios-arches.txt"
-
-          "$AQT_VENV/bin/python" -m aqt list-qt \
-            mac ios --modules "$IOS_QT_VERSION" ios \
-            | tee "$RUNNER_TEMP/qt-ios-modules.txt"
-
-          grep -Eq '(^|[[:space:]])qtmultimedia([[:space:]]|$)' \
-            "$RUNNER_TEMP/qt-ios-modules.txt"
-
-          "$AQT_VENV/bin/python" -m aqt install-qt \
-            --outputdir "$QT_ROOT" --internal \
-            mac desktop "$IOS_QT_VERSION" clang_64 \
-            --modules qtmultimedia
-
-          "$AQT_VENV/bin/python" -m aqt install-qt \
-            --outputdir "$QT_ROOT" --internal \
-            mac ios "$IOS_QT_VERSION" ios \
-            --modules qtmultimedia
-
-          QT_HOST="$QT_ROOT/$IOS_QT_VERSION/macos"
-          QT_IOS="$QT_ROOT/$IOS_QT_VERSION/ios"
-
-          test -x "$QT_HOST/bin/qt-cmake"
-          test -x "$QT_HOST/bin/lrelease"
-          test -x "$QT_IOS/bin/qt-cmake"
-          test -f "$QT_IOS/lib/cmake/Qt6Multimedia/Qt6MultimediaConfig.cmake"
-
-          echo "QUPIL_QT_HOST=$QT_HOST" >> "$GITHUB_ENV"
-          echo "QUPIL_QT_IOS=$QT_IOS" >> "$GITHUB_ENV"
-
       - name: Compile translation catalog
         shell: bash
         run: |
           set -euxo pipefail
-
+          QT_HOST="$RUNNER_TEMP/Qt/$QT_VERSION/macos"
           if [[ -f i18n/qupil_de.ts ]]; then
-            "$QUPIL_QT_HOST/bin/lrelease" \
-              i18n/qupil_de.ts \
-              -qm i18n/qupil_de.qm
+            "$QT_HOST/bin/lrelease" i18n/qupil_de.ts -qm i18n/qupil_de.qm
             test -s i18n/qupil_de.qm
           fi
+
+      - name: Verify iOS FFmpeg integration
+        shell: bash
+        run: |
+          set -euxo pipefail
+          grep -Fq 'qt_add_ios_ffmpeg_libraries(qupil)' CMakeLists.txt
+          grep -Fq 'QT_NO_FFMPEG_XCODE_EMBED_FRAMEWORKS_CODE_SIGN_ON_COPY' CMakeLists.txt
 
       - name: Configure iPhone/iPad Release
         shell: bash
         run: |
           set -euxo pipefail
-
-          rm -rf build/ios-device
-
-          "$QUPIL_QT_IOS/bin/qt-cmake" \
-            -S . \
-            -B build/ios-device \
-            -G Xcode \
-            -DQT_HOST_PATH="$QUPIL_QT_HOST" \
+          QT_ROOT="$RUNNER_TEMP/Qt"
+          QT_HOST="$QT_ROOT/$QT_VERSION/macos"
+          QT_IOS="$QT_ROOT/$QT_VERSION/ios"
+          rm -rf build-ios
+          "$QT_IOS/bin/qt-cmake" \
+            -S . -B build-ios -G Xcode \
+            -DQT_HOST_PATH="$QT_HOST" \
             -DBUILD_TESTING=OFF \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_OSX_DEPLOYMENT_TARGET="$IOS_DEPLOYMENT_TARGET" \
             -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO \
             -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED=NO \
             -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY=""
-      # QUPIL_DIRECT_IPA_RELEASE_V4
-      - name: Publish unsigned IPA for direct iPhone download
+
+      - name: Build unsigned device app
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cmake --build build-ios --config Release --parallel 4 -- \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Package unsigned IPA
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APP="$(find build-ios -type d -name '*.app' -path '*iphoneos*' -print | head -n 1)"
+          test -n "$APP"
+          test -d "$APP"
+          echo "Device app: $APP"
+
+          rm -rf dist Payload
+          mkdir -p dist Payload
+          /usr/bin/ditto "$APP" Payload/Qupil.app
+          /usr/bin/zip -qry dist/Qupil-ios-unsigned.ipa Payload
+          rm -rf Payload
+
+          test -s dist/Qupil-ios-unsigned.ipa
+          /usr/bin/unzip -Z1 dist/Qupil-ios-unsigned.ipa | grep -q '^Payload/Qupil.app/'
+          shasum -a 256 dist/Qupil-ios-unsigned.ipa > dist/SHA256SUMS
+
+          {
+            echo "Qupil: $QUPIL_SOURCE_VERSION"
+            echo "Source commit: $QUPIL_SOURCE_COMMIT"
+            echo "Qt: $QT_VERSION"
+            echo "Runner: macos-26"
+            xcodebuild -version
+            echo "iOS SDK: $(xcrun --sdk iphoneos --show-sdk-version)"
+            echo "Deployment target: $IOS_DEPLOYMENT_TARGET"
+          } > dist/BUILD-INFO.txt
+
+          ls -lh dist/Qupil-ios-unsigned.ipa
+          cat dist/SHA256SUMS
+
+      - name: Publish IPA as direct download
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ios-unsigned-latest
         run: |
           set -euo pipefail
-
-          DIRECT_DIR="$RUNNER_TEMP/qupil-direct-download"
-          PAYLOAD_DIR="$RUNNER_TEMP/qupil-ipa-payload"
-          DIRECT_IPA="$DIRECT_DIR/Qupil-ios-unsigned.ipa"
-
-          rm -rf "$DIRECT_DIR" "$PAYLOAD_DIR"
-          mkdir -p "$DIRECT_DIR"
-
-          IPA_FILE="$(
-            find "$GITHUB_WORKSPACE"               -type f               -name '*.ipa'               -not -path '*/.git/*'               -print -quit 2>/dev/null || true
-          )"
-
-          if [[ -n "$IPA_FILE" && -f "$IPA_FILE" ]]; then
-            echo "Vorhandene IPA gefunden: $IPA_FILE"
-            cp "$IPA_FILE" "$DIRECT_IPA"
-          else
-            echo "Keine IPA vorhanden; erzeuge sie aus Qupil.app."
-
-            APP_DIR="$GITHUB_WORKSPACE/build/ios-device/Release-iphoneos/Qupil.app"
-
-            if [[ ! -d "$APP_DIR" ]]; then
-              APP_DIR="$(
-                find "$GITHUB_WORKSPACE/build"                   -type d                   -path '*Release-iphoneos/*.app'                   -print -quit 2>/dev/null || true
-              )"
-            fi
-
-            if [[ -z "$APP_DIR" || ! -d "$APP_DIR" ]]; then
-              echo "FEHLER: Kein iphoneos-.app-Bundle gefunden." >&2
-              find "$GITHUB_WORKSPACE/build" -type d -name '*.app' -print 2>/dev/null || true
-              exit 1
-            fi
-
-            echo "App-Bundle: $APP_DIR"
-
-            mkdir -p "$PAYLOAD_DIR/Payload"
-            /usr/bin/ditto "$APP_DIR" "$PAYLOAD_DIR/Payload/Qupil.app"
-
-            (
-              cd "$PAYLOAD_DIR"
-              /usr/bin/zip -qry "$DIRECT_IPA" Payload
-            )
-          fi
-
-          if [[ ! -s "$DIRECT_IPA" ]]; then
-            echo "FEHLER: IPA fehlt oder ist leer." >&2
-            exit 1
-          fi
-
-          echo "IPA:"
-          ls -lh "$DIRECT_IPA"
-          shasum -a 256 "$DIRECT_IPA"
-
-          if ! /usr/bin/unzip -Z1 "$DIRECT_IPA" | grep -q '^Payload/Qupil.app/'; then
-            echo "FEHLER: IPA enthaelt kein Payload/Qupil.app/." >&2
-            /usr/bin/unzip -l "$DIRECT_IPA" | sed -n '1,80p'
-            exit 1
-          fi
+          IPA="$GITHUB_WORKSPACE/dist/Qupil-ios-unsigned.ipa"
+          test -s "$IPA"
 
           NOTES_FILE="$RUNNER_TEMP/qupil-ios-release-notes.txt"
           {
             echo 'Automatisch erzeugter unsigned iOS/iPadOS Build von Qupil.'
             echo
-            echo "Commit: $GITHUB_SHA"
+            echo "Qupil: $QUPIL_SOURCE_VERSION"
+            echo "Commit: $QUPIL_SOURCE_COMMIT"
             echo "Workflow Run: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             echo
             echo 'Die IPA ist fuer die Installation ueber SideStore vorgesehen.'
           } > "$NOTES_FILE"
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release edit "$RELEASE_TAG"               --title 'Qupil iOS unsigned - latest'               --notes-file "$NOTES_FILE"               --prerelease
-            gh release upload "$RELEASE_TAG"               "$DIRECT_IPA#Qupil-ios-unsigned.ipa"               --clobber
-          else
-            gh release create "$RELEASE_TAG"               "$DIRECT_IPA#Qupil-ios-unsigned.ipa"               --target "$GITHUB_SHA"               --title 'Qupil iOS unsigned - latest'               --notes-file "$NOTES_FILE"               --prerelease
+            gh release delete "$RELEASE_TAG" --cleanup-tag --yes
           fi
 
-          DIRECT_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/Qupil-ios-unsigned.ipa"
+          gh release create "$RELEASE_TAG" "$IPA#Qupil-ios-unsigned.ipa" \
+            --target "$QUPIL_SOURCE_COMMIT" \
+            --title 'Qupil iOS unsigned - latest' \
+            --notes-file "$NOTES_FILE" \
+            --prerelease
 
+          DIRECT_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/Qupil-ios-unsigned.ipa"
           {
             echo '## Qupil iOS'
             echo
             echo "[Qupil-ios-unsigned.ipa direkt herunterladen]($DIRECT_URL)"
             echo
-            echo "Commit: $GITHUB_SHA"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          echo "Direkter Download: $DIRECT_URL"
-      - name: Publish unsigned IPA for direct iPhone download
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ios-unsigned-latest
-        run: |
-          set -euo pipefail
-
-          DIRECT_DIR="$RUNNER_TEMP/qupil-direct-download"
-          PAYLOAD_DIR="$RUNNER_TEMP/qupil-ipa-payload"
-          DIRECT_IPA="$DIRECT_DIR/Qupil-ios-unsigned.ipa"
-
-          rm -rf "$DIRECT_DIR" "$PAYLOAD_DIR"
-          mkdir -p "$DIRECT_DIR"
-
-          IPA_FILE="$(
-            find "$GITHUB_WORKSPACE"               -type f               -name '*.ipa'               -not -path '*/.git/*'               -print -quit 2>/dev/null || true
-          )"
-
-          if [[ -n "$IPA_FILE" && -f "$IPA_FILE" ]]; then
-            echo "Vorhandene IPA gefunden: $IPA_FILE"
-            cp "$IPA_FILE" "$DIRECT_IPA"
-          else
-            echo "Keine IPA vorhanden; erzeuge sie aus Qupil.app."
-
-            APP_DIR="$GITHUB_WORKSPACE/build/ios-device/Release-iphoneos/Qupil.app"
-
-            if [[ ! -d "$APP_DIR" ]]; then
-              APP_DIR="$(
-                find "$GITHUB_WORKSPACE/build"                   -type d                   -path '*Release-iphoneos/*.app'                   -print -quit 2>/dev/null || true
-              )"
-            fi
-
-            if [[ -z "$APP_DIR" || ! -d "$APP_DIR" ]]; then
-              echo "FEHLER: Kein iphoneos-.app-Bundle gefunden." >&2
-              find "$GITHUB_WORKSPACE/build" -type d -name '*.app' -print 2>/dev/null || true
-              exit 1
-            fi
-
-            echo "App-Bundle: $APP_DIR"
-
-            mkdir -p "$PAYLOAD_DIR/Payload"
-            /usr/bin/ditto "$APP_DIR" "$PAYLOAD_DIR/Payload/Qupil.app"
-
-            (
-              cd "$PAYLOAD_DIR"
-              /usr/bin/zip -qry "$DIRECT_IPA" Payload
-            )
-          fi
-
-          if [[ ! -s "$DIRECT_IPA" ]]; then
-            echo "FEHLER: IPA fehlt oder ist leer." >&2
-            exit 1
-          fi
-
-          echo "IPA:"
-          ls -lh "$DIRECT_IPA"
-          shasum -a 256 "$DIRECT_IPA"
-
-          if ! /usr/bin/unzip -Z1 "$DIRECT_IPA" | grep -q '^Payload/Qupil.app/'; then
-            echo "FEHLER: IPA enthaelt kein Payload/Qupil.app/." >&2
-            /usr/bin/unzip -l "$DIRECT_IPA" | sed -n '1,80p'
-            exit 1
-          fi
-
-          NOTES_FILE="$RUNNER_TEMP/qupil-ios-release-notes.txt"
-          {
-            echo 'Automatisch erzeugter unsigned iOS/iPadOS Build von Qupil.'
-            echo
-            echo "Commit: $GITHUB_SHA"
-            echo "Workflow Run: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-            echo
-            echo 'Die IPA ist fuer die Installation ueber SideStore vorgesehen.'
-          } > "$NOTES_FILE"
-
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release edit "$RELEASE_TAG"               --title 'Qupil iOS unsigned - latest'               --notes-file "$NOTES_FILE"               --prerelease
-            gh release upload "$RELEASE_TAG"               "$DIRECT_IPA#Qupil-ios-unsigned.ipa"               --clobber
-          else
-            gh release create "$RELEASE_TAG"               "$DIRECT_IPA#Qupil-ios-unsigned.ipa"               --target "$GITHUB_SHA"               --title 'Qupil iOS unsigned - latest'               --notes-file "$NOTES_FILE"               --prerelease
-          fi
-
-          DIRECT_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/Qupil-ios-unsigned.ipa"
-
-          {
-            echo '## Qupil iOS'
-            echo
-            echo "[Qupil-ios-unsigned.ipa direkt herunterladen]($DIRECT_URL)"
-            echo
-            echo "Commit: $GITHUB_SHA"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          echo "Direkter Download: $DIRECT_URL"
-      - name: Publish unsigned IPA for direct iPhone download
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ios-unsigned-latest
-        run: |
-          set -euo pipefail
-
-          DIRECT_DIR="$RUNNER_TEMP/qupil-direct-download"
-          DIRECT_IPA="$DIRECT_DIR/Qupil-ios-unsigned.ipa"
-          PAYLOAD_ROOT="$RUNNER_TEMP/qupil-ipa-payload"
-
-          rm -rf "$DIRECT_DIR" "$PAYLOAD_ROOT"
-          mkdir -p "$DIRECT_DIR"
-
-          IPA_FILE="$(
-            find "$GITHUB_WORKSPACE"               -type f               -name 'Qupil-ios-unsigned.ipa'               -not -path '*/.git/*'               -print -quit 2>/dev/null || true
-          )"
-
-          if [[ -z "$IPA_FILE" ]]; then
-            IPA_FILE="$(
-              find "$GITHUB_WORKSPACE"                 -type f                 -name '*.ipa'                 -not -path '*/.git/*'                 -print -quit 2>/dev/null || true
-            )"
-          fi
-
-          if [[ -n "$IPA_FILE" && -f "$IPA_FILE" ]]; then
-            echo "Vorhandene IPA gefunden: $IPA_FILE"
-            cp "$IPA_FILE" "$DIRECT_IPA"
-          else
-            echo "Noch keine IPA vorhanden; erzeuge sie aus Qupil.app."
-
-            APP_DIR="$GITHUB_WORKSPACE/build/ios-device/Release-iphoneos/Qupil.app"
-
-            if [[ ! -d "$APP_DIR" ]]; then
-              APP_DIR="$(
-                find "$GITHUB_WORKSPACE/build"                   -type d                   -path '*Release-iphoneos/*.app'                   -print -quit 2>/dev/null || true
-              )"
-            fi
-
-            if [[ -z "$APP_DIR" || ! -d "$APP_DIR" ]]; then
-              echo "FEHLER: Weder IPA noch iphoneos-.app gefunden." >&2
-              echo "Vorhandene .app-Verzeichnisse:" >&2
-              find "$GITHUB_WORKSPACE/build" -type d -name '*.app' -print 2>/dev/null || true
-              exit 1
-            fi
-
-            echo "Verwende App-Bundle: $APP_DIR"
-
-            mkdir -p "$PAYLOAD_ROOT/Payload"
-            ditto "$APP_DIR" "$PAYLOAD_ROOT/Payload/Qupil.app"
-
-            (
-              cd "$PAYLOAD_ROOT"
-              /usr/bin/zip -qry "$DIRECT_IPA" Payload
-            )
-          fi
-
-          [[ -s "$DIRECT_IPA" ]] || {
-            echo "FEHLER: IPA fehlt oder ist leer." >&2
-            exit 1
-          }
-
-          echo "IPA erzeugt:"
-          ls -lh "$DIRECT_IPA"
-          shasum -a 256 "$DIRECT_IPA"
-
-          if ! /usr/bin/unzip -l "$DIRECT_IPA" | grep -q 'Payload/Qupil.app/'; then
-            echo "FEHLER: IPA enthaelt kein Payload/Qupil.app." >&2
-            exit 1
-          fi
-
-          NOTES_FILE="$RUNNER_TEMP/qupil-ios-release-notes.txt"
-          {
-            echo 'Automatisch erzeugter unsigned iOS/iPadOS Build von Qupil.'
-            echo
-            echo "Commit: $GITHUB_SHA"
-            echo "Workflow Run: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-            echo
-            echo 'Die IPA ist fuer die Installation ueber SideStore vorgesehen.'
-          } > "$NOTES_FILE"
-
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release edit "$RELEASE_TAG"               --title 'Qupil iOS unsigned - latest'               --notes-file "$NOTES_FILE"               --prerelease
-            gh release upload "$RELEASE_TAG"               "$DIRECT_IPA#Qupil-ios-unsigned.ipa"               --clobber
-          else
-            gh release create "$RELEASE_TAG"               "$DIRECT_IPA#Qupil-ios-unsigned.ipa"               --target "$GITHUB_SHA"               --title 'Qupil iOS unsigned - latest'               --notes-file "$NOTES_FILE"               --prerelease
-          fi
-
-          DIRECT_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/Qupil-ios-unsigned.ipa"
-
-          {
-            echo '## Qupil iOS'
-            echo
-            echo 'Die unsigned IPA kann direkt auf dem iPhone/iPad geladen werden:'
-            echo
-            echo "[Qupil-ios-unsigned.ipa direkt herunterladen]($DIRECT_URL)"
-            echo
-            echo "Commit: $GITHUB_SHA"
+            echo "Commit: $QUPIL_SOURCE_COMMIT"
           } >> "$GITHUB_STEP_SUMMARY"
 
           echo "Direkter Download: $DIRECT_URL"
