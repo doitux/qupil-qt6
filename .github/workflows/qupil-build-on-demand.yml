@@ -448,6 +448,9 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 75
 
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout Qupil source commit
         uses: actions/checkout@v4
@@ -616,50 +619,117 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
 
-      - name: Package unsigned IPA
+      - name: Publish unsigned IPA for direct iPhone download
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ios-unsigned-latest
         run: |
-          set -euxo pipefail
+          set -euo pipefail
 
-          APP="$(find build/ios-device -type d -name '*.app' -path '*iphoneos*' -print -quit)"
+          IPA_FILE="$(find "$GITHUB_WORKSPACE" -type f -name 'Qupil-ios-unsigned.ipa' -not -path '*/.git/*' -print -quit 2>/dev/null || true)"
+          if [[ -z "$IPA_FILE" ]]; then
+            IPA_FILE="$(find "$GITHUB_WORKSPACE" -type f -name '*.ipa' -not -path '*/.git/*' -print -quit 2>/dev/null || true)"
+          fi
 
-          if [[ -z "$APP" || ! -d "$APP" ]]; then
-            echo "Kein iphoneos-.app-Bundle gefunden." >&2
-            find build/ios-device -maxdepth 8 -type d -name '*.app' -print || true
-            find build/ios-device -maxdepth 6 -type f -print | head -300 || true
+          if [[ -z "$IPA_FILE" || ! -f "$IPA_FILE" ]]; then
+            echo "Keine erzeugte IPA gefunden." >&2
+            find "$GITHUB_WORKSPACE" -maxdepth 8 -type f -not -path '*/.git/*' -print | head -300 || true
             exit 1
           fi
 
-          rm -rf dist/ios Payload
-          mkdir -p dist/ios Payload
-          cp -R "$APP" Payload/
+          mkdir -p "$RUNNER_TEMP/qupil-direct-download"
+          DIRECT_IPA="$RUNNER_TEMP/qupil-direct-download/Qupil-ios-unsigned.ipa"
+          cp "$IPA_FILE" "$DIRECT_IPA"
 
-          /usr/bin/zip -qry \
-            dist/ios/Qupil-ios-unsigned.ipa \
-            Payload
+          echo "IPA fuer direkten Download:"
+          ls -lh "$DIRECT_IPA"
+          shasum -a 256 "$DIRECT_IPA"
 
-          rm -rf Payload
+          NOTES_FILE="$RUNNER_TEMP/qupil-ios-release-notes.txt"
+          printf '%s\n' \
+            'Automatisch erzeugter unsigned iOS/iPadOS Build von Qupil.' \
+            '' \
+            "Commit: $GITHUB_SHA" \
+            "Workflow Run: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            '' \
+            'Die IPA ist fuer die Installation ueber SideStore vorgesehen.' \
+            > "$NOTES_FILE"
 
-          shasum -a 256 \
-            dist/ios/Qupil-ios-unsigned.ipa \
-            > dist/ios/SHA256SUMS
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --title 'Qupil iOS unsigned - latest' --notes-file "$NOTES_FILE" --prerelease
+            gh release upload "$RELEASE_TAG" "$DIRECT_IPA#Qupil-ios-unsigned.ipa" --clobber
+          else
+            gh release create "$RELEASE_TAG" "$DIRECT_IPA#Qupil-ios-unsigned.ipa" --target "$GITHUB_SHA" --title 'Qupil iOS unsigned - latest' --notes-file "$NOTES_FILE" --prerelease
+          fi
 
+          DIRECT_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/Qupil-ios-unsigned.ipa"
           {
-            echo "Qupil: $QUPIL_SOURCE_VERSION"
-            echo "Source commit: $QUPIL_SOURCE_COMMIT"
-            echo "Qt: $IOS_QT_VERSION"
-            echo "Runner: macos-26"
-            xcodebuild -version
-            echo "iOS SDK: $(xcrun --sdk iphoneos --show-sdk-version)"
-            echo "Deployment target: $IOS_DEPLOYMENT_TARGET"
-            echo "Workflow repository: $GITHUB_REPOSITORY"
-            echo "Workflow run: $GITHUB_RUN_ID"
-          } > dist/ios/BUILD-INFO.txt
+            echo '## Qupil iOS'
+            echo
+            echo 'Die unsigned IPA kann direkt auf dem iPhone/iPad geladen werden:'
+            echo
+            echo "[Qupil-ios-unsigned.ipa direkt herunterladen]($DIRECT_URL)"
+            echo
+            echo "Commit: $GITHUB_SHA"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload iOS artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Qupil-iOS-unsigned
-          path: dist/ios/
-          if-no-files-found: error
-          retention-days: 14
+          echo "Direkter Download: $DIRECT_URL"
+
+      # QUPIL_DIRECT_IPA_RELEASE
+      - name: Publish unsigned IPA for direct iPhone download
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ios-unsigned-latest
+        run: |
+          set -euo pipefail
+
+          IPA_FILE="$(find "$GITHUB_WORKSPACE" -type f -name 'Qupil-ios-unsigned.ipa' -not -path '*/.git/*' -print -quit 2>/dev/null || true)"
+          if [[ -z "$IPA_FILE" ]]; then
+            IPA_FILE="$(find "$GITHUB_WORKSPACE" -type f -name '*.ipa' -not -path '*/.git/*' -print -quit 2>/dev/null || true)"
+          fi
+
+          if [[ -z "$IPA_FILE" || ! -f "$IPA_FILE" ]]; then
+            echo "Keine erzeugte IPA gefunden." >&2
+            find "$GITHUB_WORKSPACE" -maxdepth 8 -type f -not -path '*/.git/*' -print | head -300 || true
+            exit 1
+          fi
+
+          mkdir -p "$RUNNER_TEMP/qupil-direct-download"
+          DIRECT_IPA="$RUNNER_TEMP/qupil-direct-download/Qupil-ios-unsigned.ipa"
+          cp "$IPA_FILE" "$DIRECT_IPA"
+
+          echo "IPA fuer direkten Download:"
+          ls -lh "$DIRECT_IPA"
+          shasum -a 256 "$DIRECT_IPA"
+
+          NOTES_FILE="$RUNNER_TEMP/qupil-ios-release-notes.txt"
+          printf '%s\n' \
+            'Automatisch erzeugter unsigned iOS/iPadOS Build von Qupil.' \
+            '' \
+            "Commit: $GITHUB_SHA" \
+            "Workflow Run: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            '' \
+            'Die IPA ist fuer die Installation ueber SideStore vorgesehen.' \
+            > "$NOTES_FILE"
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --title 'Qupil iOS unsigned - latest' --notes-file "$NOTES_FILE" --prerelease
+            gh release upload "$RELEASE_TAG" "$DIRECT_IPA#Qupil-ios-unsigned.ipa" --clobber
+          else
+            gh release create "$RELEASE_TAG" "$DIRECT_IPA#Qupil-ios-unsigned.ipa" --target "$GITHUB_SHA" --title 'Qupil iOS unsigned - latest' --notes-file "$NOTES_FILE" --prerelease
+          fi
+
+          DIRECT_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/Qupil-ios-unsigned.ipa"
+          {
+            echo '## Qupil iOS'
+            echo
+            echo 'Die unsigned IPA kann direkt auf dem iPhone/iPad geladen werden:'
+            echo
+            echo "[Qupil-ios-unsigned.ipa direkt herunterladen]($DIRECT_URL)"
+            echo
+            echo "Commit: $GITHUB_SHA"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "Direkter Download: $DIRECT_URL"
