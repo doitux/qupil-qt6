@@ -65,7 +65,7 @@ jobs:
           host: windows
           target: desktop
           arch: win64_msvc2022_64
-          modules: "qtmultimedia qtsvg"
+          modules: "qtmultimedia"
           cache: true
 
       - name: Enable MSVC 2022 x64 environment
@@ -192,7 +192,7 @@ jobs:
           version: ${{ env.CI_QT_VERSION }}
           host: mac
           target: desktop
-          modules: "qtmultimedia qtsvg"
+          modules: "qtmultimedia"
           cache: true
 
       - name: Toolchain preflight
@@ -338,7 +338,7 @@ jobs:
           host: linux
           target: android
           arch: android_arm64_v8a
-          modules: "qtmultimedia qtsvg"
+          modules: "qtmultimedia"
           cache: true
 
       - name: Android preflight
@@ -446,7 +446,7 @@ jobs:
           host: mac
           target: ios
           arch: ios
-          modules: "qtmultimedia qtsvg"
+          modules: "qtmultimedia"
           cache: true
 
       - name: iOS preflight
