@@ -20,7 +20,7 @@ permissions:
   contents: read
 
 env:
-  QT_VERSION: "6.11.2"
+  CI_QT_VERSION: "6.10.3"
   BUILD_TYPE: "Release"
 
 jobs:
@@ -36,7 +36,7 @@ jobs:
           submodules: recursive
       - uses: jurplel/install-qt-action@v4
         with:
-          version: ${{ env.QT_VERSION }}
+          version: ${{ env.CI_QT_VERSION }}
           host: windows
           target: desktop
           arch: win64_msvc2022_64
@@ -83,7 +83,7 @@ jobs:
           submodules: recursive
       - uses: jurplel/install-qt-action@v4
         with:
-          version: ${{ env.QT_VERSION }}
+          version: ${{ env.CI_QT_VERSION }}
           host: mac
           target: desktop
           arch: clang_64
@@ -146,7 +146,7 @@ jobs:
           sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018"
       - uses: jurplel/install-qt-action@v4
         with:
-          version: ${{ env.QT_VERSION }}
+          version: ${{ env.CI_QT_VERSION }}
           host: linux
           target: android
           arch: android_arm64_v8a
@@ -198,7 +198,7 @@ jobs:
           submodules: recursive
       - uses: jurplel/install-qt-action@v4
         with:
-          version: ${{ env.QT_VERSION }}
+          version: ${{ env.CI_QT_VERSION }}
           host: mac
           target: ios
           arch: ios

@@ -31,4 +31,11 @@ oder TestFlight braucht Apple-Code-Signing und wird spaeter separat ergaenzt.
 
 Android baut zunaechst ein ARM64-Debug-APK fuer schnelle Tests.
 
-CI verwendet Qt 6.11.2; dein lokales Qt 6/Qt Creator wird nicht veraendert.
+CI verwendet Qt 6.10.3; dein lokales Qt 6/Qt Creator wird nicht veraendert.
+
+
+## Qt-Versionen
+
+- GitHub Actions / CI: Qt 6.10.3
+- Lokaler Linux-Build: Qt 6.11.2
+- Beide Umgebungen sind bewusst getrennt.
