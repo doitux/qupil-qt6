@@ -9,7 +9,6 @@ ColumnLayout {
     property alias text: field.text
     property alias placeholderText: field.placeholderText
     property alias readOnly: field.readOnly
-    signal editingFinished()
 
     spacing: 4
     Layout.fillWidth: true
@@ -22,6 +21,5 @@ ColumnLayout {
     TextField {
         id: field
         Layout.fillWidth: true
-        onEditingFinished: root.editingFinished()
     }
 }

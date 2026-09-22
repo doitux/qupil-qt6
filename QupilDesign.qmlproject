@@ -1,0 +1,20 @@
+// Qt Design Studio companion project for Qupil.
+// Runtime/build source of truth remains CMakeLists.txt.
+import QmlProject
+
+Project {
+    mainFile: "qml/pages/DashboardPageForm.ui.qml"
+
+    QmlFiles {
+        directory: "qml"
+    }
+
+    Files {
+        filter: "*.wav"
+        directory: "data/sounds"
+    }
+
+    qt6Project: true
+    qdsVersion: "4.8"
+    importPaths: [ "qml", "qml/components", "qml/pages" ]
+}

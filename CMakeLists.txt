@@ -60,27 +60,42 @@ qt_add_qml_module(qupil
     VERSION 1.0
     QML_FILES
         qml/Main.qml
-        qml/components/SectionCard.qml
-        qml/components/EmptyState.qml
-        qml/components/LabeledField.qml
+        qml/components/SectionCard.ui.qml
+        qml/components/EmptyState.ui.qml
+        qml/components/LabeledField.ui.qml
         qml/components/DocumentActions.qml
         qml/components/DocumentPreviewDialog.qml
         qml/components/DailyScheduleDialog.qml
         qml/pages/DashboardPage.qml
+        qml/pages/DashboardPageForm.ui.qml
         qml/pages/SchedulePage.qml
+        qml/pages/SchedulePageForm.ui.qml
         qml/pages/PupilsPage.qml
+        qml/pages/PupilsPageForm.ui.qml
         qml/pages/PupilDetailPage.qml
+        qml/pages/PupilDetailPageForm.ui.qml
         qml/pages/LessonsPage.qml
+        qml/pages/LessonsPageForm.ui.qml
         qml/pages/LessonDetailPage.qml
+        qml/pages/LessonDetailPageForm.ui.qml
         qml/pages/RemindersPage.qml
+        qml/pages/RemindersPageForm.ui.qml
         qml/pages/LibraryPage.qml
+        qml/pages/LibraryPageForm.ui.qml
         qml/pages/RecitalsPage.qml
+        qml/pages/RecitalsPageForm.ui.qml
         qml/pages/RecitalDetailPage.qml
+        qml/pages/RecitalDetailPageForm.ui.qml
         qml/pages/ArchivePage.qml
+        qml/pages/ArchivePageForm.ui.qml
         qml/pages/MetronomePage.qml
+        qml/pages/MetronomePageForm.ui.qml
         qml/pages/SettingsPage.qml
+        qml/pages/SettingsPageForm.ui.qml
         qml/pages/ReportsPage.qml
+        qml/pages/ReportsPageForm.ui.qml
         qml/pages/CsvImportPage.qml
+        qml/pages/CsvImportPageForm.ui.qml
     RESOURCES
         data/sounds/s1.wav
         data/sounds/s2.wav

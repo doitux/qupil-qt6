@@ -2,8 +2,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
-import QtQuick.Layouts
-import Qupil
 
 Page {
     id: root
@@ -11,13 +9,24 @@ Page {
 
     property url csvFile
     property var csvData: ({ headers: [], preview: [], rowCount: 0, delimiter: "," })
+
+    property string summaryText: csvData.rowCount
+                                 ? qsTr("%1 data rows · separator '%2'").arg(csvData.rowCount).arg(csvData.delimiter)
+                                 : ""
+    property var previewLines: {
+        const result = []
+        const rows = csvData.preview || []
+        for (let i = 0; i < rows.length; ++i)
+            result.push(rows[i].join("  |  "))
+        return result
+    }
+
     property var fields: [
         ["forename", qsTr("First name")], ["surname", qsTr("Last name")],
         ["birthday", qsTr("Birthday")], ["street", qsTr("Street")],
         ["zip", qsTr("Zip code")], ["city", qsTr("City")],
         ["phone", qsTr("Phone")], ["mobile", qsTr("Mobile")], ["email", qsTr("E-mail")]
     ]
-    property var selectors: []
 
     function guessIndex(fieldKey) {
         const aliases = {
@@ -34,18 +43,23 @@ Page {
         const keys = aliases[fieldKey] || [fieldKey]
         for (let i = 0; i < csvData.headers.length; ++i) {
             const h = String(csvData.headers[i]).toLowerCase()
-            if (keys.some(k => h.indexOf(k) >= 0)) return i
+            if (keys.some(k => h.indexOf(k) >= 0))
+                return i
         }
         return -1
     }
 
     function loadPreview() {
-        if (!csvFile || String(csvFile).length === 0) return
-        csvData = App.previewPupilCsv(csvFile, encoding.currentText)
+        if (!csvFile || String(csvFile).length === 0)
+            return
+        csvData = App.previewPupilCsv(csvFile, form.encoding.currentText)
         Qt.callLater(function() {
-            for (let i = 0; i < selectors.length; ++i) {
+            for (let i = 0; i < fields.length; ++i) {
+                const row = form.mappingRepeater.itemAt(i)
+                if (!row)
+                    continue
                 const idx = guessIndex(fields[i][0])
-                selectors[i].currentIndex = idx >= 0 ? idx : csvData.headers.length
+                row.selectorControl.currentIndex = idx >= 0 ? idx : csvData.headers.length
             }
         })
     }
@@ -53,14 +67,42 @@ Page {
     function importRows() {
         const map = {}
         for (let i = 0; i < fields.length; ++i) {
-            const cb = selectors[i]
-            map[fields[i][0]] = cb.currentIndex < csvData.headers.length ? cb.currentIndex : -1
+            const row = form.mappingRepeater.itemAt(i)
+            const currentIndex = row ? row.selectorControl.currentIndex : csvData.headers.length
+            map[fields[i][0]] = currentIndex < csvData.headers.length ? currentIndex : -1
         }
-        const count = App.importPupilCsv(csvFile, encoding.currentText, map)
+        const count = App.importPupilCsv(csvFile, form.encoding.currentText, map)
         if (count >= 0) {
-            resultLabel.text = qsTr("%1 pupils imported").arg(count)
-            resultPopup.open()
+            form.resultLabel.text = qsTr("%1 pupils imported").arg(count)
+            form.resultPopup.open()
         }
+    }
+
+    Action { id: chooseFileAction; onTriggered: picker.open() }
+    Action { id: backAction; onTriggered: root.done() }
+    Action { id: importAction; onTriggered: root.importRows() }
+    Action {
+        id: doneAction
+        onTriggered: {
+            form.resultPopup.close()
+            root.done()
+        }
+    }
+
+    CsvImportPageForm {
+        id: form
+        anchors.fill: parent
+        csvFileString: root.csvFile ? String(root.csvFile) : ""
+        csvData: root.csvData
+        fields: root.fields
+        summaryText: root.summaryText
+        previewLines: root.previewLines
+        chooseFileAction: chooseFileAction
+        backAction: backAction
+        importAction: importAction
+        doneAction: doneAction
+
+        encoding.onActivated: root.loadPreview()
     }
 
     FileDialog {
@@ -68,86 +110,9 @@ Page {
         title: qsTr("Open address CSV")
         fileMode: FileDialog.OpenFile
         nameFilters: [qsTr("CSV files (*.csv)"), qsTr("All files (*)")]
-        onAccepted: { root.csvFile = selectedFile; root.loadPreview() }
-    }
-
-    ScrollView {
-        id: scroll
-        anchors.fill: parent
-        contentWidth: availableWidth
-
-        ColumnLayout {
-            width: scroll.availableWidth
-            spacing: 12
-
-            SectionCard {
-                title: qsTr("CSV address-book import")
-                Layout.fillWidth: true; Layout.margins: 12
-                RowLayout {
-                    Layout.fillWidth: true
-                    Button { text: qsTr("Choose CSV…"); onClicked: picker.open() }
-                    ComboBox {
-                        id: encoding
-                        model: ["UTF-8", "Latin-1"]
-                        onActivated: root.loadPreview()
-                    }
-                    Label { text: root.csvData.rowCount ? qsTr("%1 data rows · separator '%2'").arg(root.csvData.rowCount).arg(root.csvData.delimiter) : ""; Layout.fillWidth: true }
-                }
-                Label { text: root.csvFile ? String(root.csvFile) : qsTr("No file selected"); opacity: 0.6; wrapMode: Text.WrapAnywhere; Layout.fillWidth: true }
-            }
-
-            SectionCard {
-                visible: root.csvData.headers && root.csvData.headers.length > 0
-                title: qsTr("Field mapping")
-                Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
-
-                Repeater {
-                    model: root.fields
-                    delegate: RowLayout {
-                        required property var modelData
-                        required property int index
-                        Layout.fillWidth: true
-                        Label { text: modelData[1]; Layout.preferredWidth: 140 }
-                        ComboBox {
-                            id: selector
-                            Layout.fillWidth: true
-                            model: root.csvData.headers.concat([qsTr("Do not import")])
-                            Component.onCompleted: root.selectors[index] = selector
-                        }
-                    }
-                }
-            }
-
-            SectionCard {
-                visible: root.csvData.preview && root.csvData.preview.length > 0
-                title: qsTr("Preview")
-                Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
-                Repeater {
-                    model: root.csvData.preview
-                    delegate: Label {
-                        required property var modelData
-                        text: modelData.join("  |  ")
-                        font.family: "monospace"
-                        elide: Text.ElideRight
-                        Layout.fillWidth: true
-                    }
-                }
-            }
-
-            RowLayout {
-                Layout.margins: 12
-                Button { text: qsTr("Back"); onClicked: root.done() }
-                Button { text: qsTr("Import"); enabled: root.csvData.rowCount > 0; onClicked: root.importRows() }
-            }
-        }
-    }
-
-    Popup {
-        id: resultPopup
-        anchors.centerIn: parent
-        ColumnLayout {
-            Label { id: resultLabel }
-            Button { text: qsTr("Done"); onClicked: { resultPopup.close(); root.done() } }
+        onAccepted: {
+            root.csvFile = selectedFile
+            root.loadPreview()
         }
     }
 }
