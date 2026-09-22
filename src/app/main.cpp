@@ -28,22 +28,25 @@ int main(int argc, char *argv[])
     QQmlApplicationEngine engine;
     LanguageController languageController(&engine);
 
-    AppController controller;
+    // AppController is owned by QGuiApplication so it outlives the QML engine.
+    // Otherwise the stack-local controller is destroyed before 'engine' and
+    // QML bindings briefly see App == null during application shutdown.
+    auto *controller = new AppController(&app);
     MetronomeController metronome;
 
     // Rebuild translated C++ model roles whenever the user changes language.
     // QQmlEngine::retranslate() (called by LanguageController) handles qsTr()
     // bindings; refreshAll() handles strings materialized inside C++ models.
     QObject::connect(&languageController, &LanguageController::effectiveLanguageChanged,
-                     &controller, &AppController::refreshAll);
+                     controller, &AppController::refreshAll);
 
     // Build/CI-only diagnostic. It verifies both initial translation timing and
     // a live de -> en -> de model round-trip without affecting normal runs.
     if (qEnvironmentVariableIsSet("QUPIL_I18N_SELFTEST")) {
-        const auto logModels = [&controller](const QString &tag) {
-            const QVariantMap lesson = controller.lessons()->get(0);
-            const QVariantMap reminder = controller.reminders()->get(0);
-            const QVariantMap recital = controller.recitals()->get(0);
+        const auto logModels = [controller](const QString &tag) {
+            const QVariantMap lesson = controller->lessons()->get(0);
+            const QVariantMap reminder = controller->reminders()->get(0);
+            const QVariantMap recital = controller->recitals()->get(0);
             qInfo().noquote()
                 << QStringLiteral("QUPIL_I18N_MODELS_%1=%2|%3|%4|%5")
                        .arg(tag,
@@ -60,7 +63,7 @@ int main(int argc, char *argv[])
     }
 
     engine.rootContext()->setContextProperty(QStringLiteral("Language"), &languageController);
-    engine.rootContext()->setContextProperty(QStringLiteral("App"), &controller);
+    engine.rootContext()->setContextProperty(QStringLiteral("App"), controller);
     engine.rootContext()->setContextProperty(QStringLiteral("Metronome"), &metronome);
 
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
