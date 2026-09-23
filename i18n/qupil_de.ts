@@ -822,6 +822,18 @@
             <source>Printing is available on the desktop build.</source>
             <translation>Drucken ist in der Desktop-Version verfügbar.</translation>
         </message>
+        <message>
+            <source>IL-</source>
+            <translation>EU-</translation>
+        </message>
+        <message>
+            <source>GL-</source>
+            <translation>GU-</translation>
+        </message>
+        <message>
+            <source>EnsL-</source>
+            <translation>EnsU-</translation>
+        </message>
     </context>
     <context>
         <name>ArchivePage</name>

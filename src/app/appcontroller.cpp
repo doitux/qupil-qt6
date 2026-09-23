@@ -2351,9 +2351,9 @@ void AppController::updateLessonAutoName(int lessonId)
 
     QString name;
     switch (l.value(QStringLiteral("type")).toInt()) {
-    case 1: name = QStringLiteral("IL-"); break;
-    case 2: name = QStringLiteral("GL-"); break;
-    case 3: name = QStringLiteral("EnsL-"); break;
+    case 1: name = tr("IL-"); break;
+    case 2: name = tr("GL-"); break;
+    case 3: name = tr("EnsL-"); break;
     default: name = QStringLiteral("L-"); break;
     }
 

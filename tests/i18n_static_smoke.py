@@ -82,4 +82,37 @@ plural = translations.get("Lesson %1 ends in %n minute(s).")
 assert plural == ["Unterricht %1 endet in %n Minute.",
                   "Unterricht %1 endet in %n Minuten."], plural
 
+# QUPIL_AUTO_LESSON_PREFIX_REGRESSION_V1
+# This is a static regression guard, not a database/UI runtime test.
+auto_name_matches = list(re.finditer(
+    r"void AppController::updateLessonAutoName\(int lessonId\)\n\{.*?\n\}\n",
+    app, re.S))
+assert len(auto_name_matches) == 1, "updateLessonAutoName() must exist exactly once"
+auto_name_body = auto_name_matches[0].group(0)
+assert re.search(
+    r'if\s*\(l\.isEmpty\(\)\s*\|\|\s*!l\.value\(QStringLiteral\("autoName"\)\)'
+    r'\.toBool\(\)\)\s*return\s*;', auto_name_body), \
+    "Empty lessons and manually named lessons must stay protected"
+app_contexts = [c for c in root.findall("context")
+                if c.findtext("name") == "AppController"]
+assert len(app_contexts) == 1, "AppController translation context must be unique"
+for kind, source, german in ((1, "IL-", "EU-"), (2, "GL-", "GU-"),
+                             (3, "EnsL-", "EnsU-")):
+    assert re.search(
+        rf'case\s+{kind}\s*:\s*name\s*=\s*tr\("{re.escape(source)}"\)\s*;\s*break\s*;',
+        auto_name_body), f"Lesson type {kind} must use tr({source!r})"
+    matches = [m for m in app_contexts[0].findall("message")
+               if m.findtext("source") == source]
+    assert len(matches) == 1, f"Expected exactly one AppController :: {source}"
+    message = matches[0]
+    translation = message.find("translation")
+    assert not message.findtext("comment") and message.get("numerus") != "yes"
+    assert translation is not None and translation.get("type") not in {
+        "unfinished", "obsolete", "vanished"}, f"Inactive prefix: {source}"
+    assert "".join(translation.itertext()) == german, f"Wrong German prefix: {source}"
+assert re.search(r'default\s*:\s*name\s*=\s*QStringLiteral\("L-"\)\s*;\s*break\s*;',
+                 auto_name_body), "Fallback L- must remain unchanged"
+print("PASS: static guards for translated lesson prefixes and manual-name protection")
+# END QUPIL_AUTO_LESSON_PREFIX_REGRESSION_V1
+
 print("PASS: translator initializes before AppController; dynamic model retranslation is wired and catalog values are correct")
