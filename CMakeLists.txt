@@ -200,6 +200,23 @@ target_compile_definitions(qupil PRIVATE
     QUPIL_VERSION="${PROJECT_VERSION}"
 )
 
+# Build identity shown in the navigation footer and startup log.  The helper
+# runs for every build, so commit/timestamp describe the binary being tested
+# rather than the time at which CMake was configured.
+set(QUPIL_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(QUPIL_BUILD_INFO_HEADER "${QUPIL_GENERATED_DIR}/qupil_build_info.h")
+add_custom_target(qupil_build_info ALL
+    COMMAND "${CMAKE_COMMAND}"
+        "-DQUPIL_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+        "-DQUPIL_OUTPUT_FILE=${QUPIL_BUILD_INFO_HEADER}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateBuildInfo.cmake"
+    BYPRODUCTS "${QUPIL_BUILD_INFO_HEADER}"
+    COMMENT "Generating Qupil build identity"
+    VERBATIM
+)
+add_dependencies(qupil qupil_build_info)
+target_include_directories(qupil PRIVATE "${QUPIL_GENERATED_DIR}")
+
 set_target_properties(qupil PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE

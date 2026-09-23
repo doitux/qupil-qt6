@@ -243,7 +243,8 @@ id: root
                     Layout.fillWidth: true
                 }
                 Label {
-                    text: "Qupil " + Qt.application.version + " · v28-r2"
+                    text: "Qupil " + Qt.application.version + " · " + QupilBuildCommit
+                          + "\n" + QupilBuildTimestamp
                     opacity: 0.62
                     font.pixelSize: 11
                     Layout.fillWidth: true

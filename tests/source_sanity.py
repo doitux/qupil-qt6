@@ -82,6 +82,25 @@ assert "contentWidth: Math.max(availableWidth, paper.width + 32)" not in preview
 assert "width: previewScroll.contentWidth" not in preview_qml
 assert "width: Math.max(300, previewScroll.availableWidth - 48)" not in preview_qml
 
+# Build identity must be generated from the source revision at build time, not
+# maintained as a manual UI revision such as "v28-r2".
+main_qml = (ROOT / "qml/Main.qml").read_text(encoding="utf-8")
+main_cpp = (ROOT / "src/app/main.cpp").read_text(encoding="utf-8")
+build_info_script = (ROOT / "cmake/GenerateBuildInfo.cmake").read_text(encoding="utf-8")
+assert "v28-r2" not in main_qml
+assert "Qt.application.version" in main_qml
+assert "QupilBuildCommit" in main_qml and "QupilBuildTimestamp" in main_qml
+assert '#include "qupil_build_info.h"' in main_cpp
+assert "QUPIL_BUILD version=%1 commit=%2 timestamp=%3" in main_cpp
+assert "QupilBuildCommit" in main_cpp and "QupilBuildTimestamp" in main_cpp
+assert "add_custom_target(qupil_build_info ALL" in cmake
+assert "GenerateBuildInfo.cmake" in cmake
+assert "add_dependencies(qupil qupil_build_info)" in cmake
+assert "rev-parse --short=7 HEAD" in build_info_script
+assert '":(exclude)PROJECT-STATE.md"' in build_info_script
+assert 'string(TIMESTAMP _timestamp "%Y-%m-%dT%H:%M:%SZ" UTC)' in build_info_script
+assert "-dirty" in build_info_script
+
 # Unsupported in Qt 6.5 TextField; SearchField only arrived later.
 for path in qml_files:
     text = path.read_text(encoding="utf-8")

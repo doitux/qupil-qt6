@@ -20,6 +20,7 @@
 #include "appcontroller.h"
 #include "languagecontroller.h"
 #include "metronomecontroller.h"
+#include "qupil_build_info.h"
 
 int main(int argc, char *argv[])
 {
@@ -53,6 +54,12 @@ int main(int argc, char *argv[])
     QCoreApplication::setApplicationVersion(QStringLiteral(QUPIL_VERSION));
     app.setWindowIcon(QIcon(QStringLiteral(":/qt/qml/Qupil/qupil.png")));
     app.setApplicationDisplayName(QStringLiteral("Qupil"));
+
+    const QString buildCommit = QStringLiteral(QUPIL_BUILD_COMMIT);
+    const QString buildTimestamp = QStringLiteral(QUPIL_BUILD_TIMESTAMP);
+    qInfo().noquote()
+        << QStringLiteral("QUPIL_BUILD version=%1 commit=%2 timestamp=%3")
+               .arg(QCoreApplication::applicationVersion(), buildCommit, buildTimestamp);
 
     // Install the selected translator before AppController is constructed.
     // AppController populates translated model roles in its constructor, so the
@@ -97,6 +104,8 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("Language"), &languageController);
     engine.rootContext()->setContextProperty(QStringLiteral("App"), controller);
     engine.rootContext()->setContextProperty(QStringLiteral("Metronome"), &metronome);
+    engine.rootContext()->setContextProperty(QStringLiteral("QupilBuildCommit"), buildCommit);
+    engine.rootContext()->setContextProperty(QStringLiteral("QupilBuildTimestamp"), buildTimestamp);
 
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
                      &app, [] { QCoreApplication::exit(EXIT_FAILURE); },
