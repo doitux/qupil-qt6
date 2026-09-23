@@ -136,7 +136,7 @@ bool DatabaseManager::restoreFrom(const QString &sourcePath)
             if (valid && tables.contains(QStringLiteral("dbinfos"), Qt::CaseInsensitive)) {
                 QSqlQuery revisionQuery(sourceDb);
                 if (revisionQuery.exec(QStringLiteral("SELECT data_structure_rev FROM dbinfos WHERE id=0"))
-                    && revisionQuery.next() && revisionQuery.value(0).toInt() > 3) {
+                    && revisionQuery.next() && revisionQuery.value(0).toInt() > 4) {
                     valid = false;
                     validationError = QStringLiteral("The backup uses a newer database schema revision.");
                 }
@@ -251,7 +251,7 @@ bool DatabaseManager::ensureSchema()
         QStringLiteral("CREATE TABLE IF NOT EXISTS pupil (pupilid INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, surname TEXT, forename TEXT, address TEXT, email TEXT, telefon TEXT, handy TEXT, birthday TEXT, notes TEXT, fathername TEXT, fatherjob TEXT, fathertelefon TEXT, mothername TEXT, motherjob TEXT, mothertelefon TEXT, firstlessondate TEXT, instrumenttype TEXT, instrumentsize TEXT, ifinstrumentnextsize INTEGER DEFAULT 0, ifrentinstrument INTEGER DEFAULT 0, rentinstrumentdesc TEXT, rentinstrumentstartdate TEXT, recitalinterval INTEGER NOT NULL DEFAULT 5, ensembleactivityrequested INTEGER NOT NULL DEFAULT 1)"),
         QStringLiteral("CREATE TABLE IF NOT EXISTS pupilarchive (pupilid INTEGER NOT NULL PRIMARY KEY, surname TEXT, forename TEXT, data TEXT)"),
         QStringLiteral("CREATE TABLE IF NOT EXISTS lesson (lessonid INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, state INTEGER DEFAULT 1, type INTEGER DEFAULT 1, autolessonname INTEGER DEFAULT 1, lessonname TEXT, unsteadylesson INTEGER DEFAULT 1, lessonday INTEGER, lessonstarttime TEXT, lessonstoptime TEXT, lessonlocation TEXT)"),
-        QStringLiteral("CREATE TABLE IF NOT EXISTS lastlessonname (llnid INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, lessonname TEXT)"),
+        QStringLiteral("CREATE TABLE IF NOT EXISTS lastlessonname (llnid INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, lessonname TEXT, namekind INTEGER NOT NULL DEFAULT 0, lessontype INTEGER, durationminutes INTEGER, locationtoken TEXT, pupiltoken TEXT, formatrev INTEGER NOT NULL DEFAULT 1)"),
         QStringLiteral("CREATE TABLE IF NOT EXISTS pupilatlesson (palid INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, lessonid INTEGER NOT NULL, pupilid INTEGER NOT NULL, llnid INTEGER, startdate TEXT, stopdate TEXT)"),
         QStringLiteral("CREATE TABLE IF NOT EXISTS piececomposer (piececomposerid INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, composer TEXT)"),
         QStringLiteral("CREATE TABLE IF NOT EXISTS piece (pieceid INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, cpieceid INTEGER, palid INTEGER, title TEXT, genre TEXT, duration INTEGER, startdate TEXT, stopdate TEXT, state INTEGER, piececomposerid INTEGER DEFAULT 1)"),
@@ -275,12 +275,18 @@ bool DatabaseManager::ensureSchema()
         }
     }
 
-    // Idempotently lift pre-revision-3 databases to the columns used by 1.4.1.
+    // Idempotently lift legacy databases to the current revision-4 schema.
     if (!ensureColumn(QStringLiteral("pupil"), QStringLiteral("recitalinterval"), QStringLiteral("INTEGER NOT NULL DEFAULT 5")) ||
         !ensureColumn(QStringLiteral("pupil"), QStringLiteral("ensembleactivityrequested"), QStringLiteral("INTEGER NOT NULL DEFAULT 1")) ||
         !ensureColumn(QStringLiteral("piece"), QStringLiteral("piececomposerid"), QStringLiteral("INTEGER DEFAULT 1")) ||
         !ensureColumn(QStringLiteral("activity"), QStringLiteral("noncontinoustype"), QStringLiteral("INTEGER NOT NULL DEFAULT 0")) ||
-        !ensureColumn(QStringLiteral("activity"), QStringLiteral("continoustype"), QStringLiteral("INTEGER NOT NULL DEFAULT 0"))) {
+        !ensureColumn(QStringLiteral("activity"), QStringLiteral("continoustype"), QStringLiteral("INTEGER NOT NULL DEFAULT 0")) ||
+        !ensureColumn(QStringLiteral("lastlessonname"), QStringLiteral("namekind"), QStringLiteral("INTEGER NOT NULL DEFAULT 0")) ||
+        !ensureColumn(QStringLiteral("lastlessonname"), QStringLiteral("lessontype"), QStringLiteral("INTEGER")) ||
+        !ensureColumn(QStringLiteral("lastlessonname"), QStringLiteral("durationminutes"), QStringLiteral("INTEGER")) ||
+        !ensureColumn(QStringLiteral("lastlessonname"), QStringLiteral("locationtoken"), QStringLiteral("TEXT")) ||
+        !ensureColumn(QStringLiteral("lastlessonname"), QStringLiteral("pupiltoken"), QStringLiteral("TEXT")) ||
+        !ensureColumn(QStringLiteral("lastlessonname"), QStringLiteral("formatrev"), QStringLiteral("INTEGER NOT NULL DEFAULT 1"))) {
         m_db.rollback();
         return false;
     }
@@ -289,7 +295,7 @@ bool DatabaseManager::ensureSchema()
         !exec(QStringLiteral("INSERT OR IGNORE INTO piececomposer (piececomposerid, composer) VALUES (1, '')")) ||
         !exec(QStringLiteral("INSERT OR IGNORE INTO smlauthor (smlauthorid, author) VALUES (1, '')")) ||
         !exec(QStringLiteral("INSERT OR IGNORE INTO smlpublisher (smlpublisherid, publisher) VALUES (1, '')")) ||
-        !exec(QStringLiteral("REPLACE INTO dbinfos (id, data_structure_rev) VALUES (0, 3)"))) {
+        !exec(QStringLiteral("REPLACE INTO dbinfos (id, data_structure_rev) VALUES (0, 4)"))) {
         m_db.rollback();
         return false;
     }

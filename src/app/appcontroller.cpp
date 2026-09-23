@@ -46,6 +46,10 @@
 #include <utility>
 
 namespace {
+constexpr int LastLessonNameManualLiteral = 1;
+constexpr int LastLessonNameAutomaticV1 = 2;
+constexpr int LastLessonNameFormatV1 = 1;
+
 QString isoToday()
 {
     return QDate::currentDate().toString(Qt::ISODate);
@@ -2435,7 +2439,10 @@ bool AppController::addPupilToLesson(int lessonId, int pupilId)
 bool AppController::removePupilFromLesson(int lessonId, int pupilId)
 {
     const QVariantMap membership = selectOne(QStringLiteral(
-        "SELECT pal.palid AS palId, pal.startdate AS startDate, COALESCE(l.lessonname,'') AS lessonName "
+        "SELECT pal.palid AS palId, pal.startdate AS startDate, COALESCE(l.lessonname,'') AS lessonName, "
+        "COALESCE(l.autolessonname,1) AS autoName, COALESCE(l.type,1) AS lessonType, "
+        "COALESCE(l.unsteadylesson,1) AS irregular, COALESCE(l.lessonstarttime,'') AS start, "
+        "COALESCE(l.lessonstoptime,'') AS stop, COALESCE(l.lessonlocation,'') AS location "
         "FROM pupilatlesson pal JOIN lesson l ON l.lessonid=pal.lessonid "
         "WHERE pal.lessonid=? AND pal.pupilid=? AND pal.stopdate > date('now') ORDER BY pal.palid DESC LIMIT 1"),
         {lessonId, pupilId});
@@ -2446,8 +2453,43 @@ bool AppController::removePupilFromLesson(int lessonId, int pupilId)
     const QDate startDate = QDate::fromString(membership.value(QStringLiteral("startDate")).toString(), Qt::ISODate);
     bool ok = false;
     if (startDate.isValid() && startDate.daysTo(QDate::currentDate()) > 30) {
-        const qint64 llnId = insert(QStringLiteral("INSERT INTO lastlessonname (lessonname) VALUES (?)"),
-                                    {membership.value(QStringLiteral("lessonName"))});
+        const bool autoName = membership.value(QStringLiteral("autoName")).toBool();
+        int durationMinutes = -1;
+        if (autoName && !membership.value(QStringLiteral("irregular")).toBool()) {
+            const QTime start = QTime::fromString(membership.value(QStringLiteral("start")).toString(), QStringLiteral("hh:mm"));
+            const QTime stop = QTime::fromString(membership.value(QStringLiteral("stop")).toString(), QStringLiteral("hh:mm"));
+            if (start.isValid() && stop.isValid())
+                durationMinutes = start.secsTo(stop) / 60;
+        }
+
+        QString locationToken;
+        QString pupilToken;
+        if (autoName) {
+            locationToken = membership.value(QStringLiteral("location")).toString().trimmed().left(3);
+            const QVariantList members = lessonPupils(lessonId);
+            if (!members.isEmpty()) {
+                if (membership.value(QStringLiteral("lessonType")).toInt() == 1) {
+                    const QVariantMap first = members.constFirst().toMap();
+                    pupilToken = first.value(QStringLiteral("forename")).toString().left(3)
+                               + first.value(QStringLiteral("surname")).toString().left(3);
+                } else {
+                    for (const QVariant &item : members)
+                        pupilToken += item.toMap().value(QStringLiteral("forename")).toString().left(1);
+                }
+            }
+        }
+
+        const qint64 llnId = insert(QStringLiteral(
+            "INSERT INTO lastlessonname "
+            "(lessonname,namekind,lessontype,durationminutes,locationtoken,pupiltoken,formatrev) "
+            "VALUES (?,?,?,?,?,?,?)"),
+            {membership.value(QStringLiteral("lessonName")),
+             autoName ? LastLessonNameAutomaticV1 : LastLessonNameManualLiteral,
+             autoName ? membership.value(QStringLiteral("lessonType")) : QVariant{},
+             autoName && durationMinutes >= 0 ? QVariant(durationMinutes) : QVariant{},
+             autoName ? QVariant(locationToken) : QVariant{},
+             autoName ? QVariant(pupilToken) : QVariant{},
+             LastLessonNameFormatV1});
         ok = llnId >= 0 && execute(QStringLiteral("UPDATE pupilatlesson SET stopdate=?,llnid=? WHERE palid=?"),
                                    {isoToday(), llnId, palId});
     } else {

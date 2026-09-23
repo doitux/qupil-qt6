@@ -80,6 +80,8 @@ for statement in qstring_literals(DB_CPP[schema_end:]):
 expected = {
     "pupil": {"pupilid", "recitalinterval", "ensembleactivityrequested"},
     "lesson": {"lessonid", "lessonname", "lessonlocation"},
+    "lastlessonname": {"llnid", "lessonname", "namekind", "lessontype", "durationminutes",
+                       "locationtoken", "pupiltoken", "formatrev"},
     "pupilatlesson": {"palid", "lessonid", "pupilid", "llnid", "stopdate"},
     "piece": {"pieceid", "cpieceid", "piececomposerid", "state"},
     "activity": {"activityid", "noncontinoustype", "continoustype", "continousstopdate"},
@@ -90,6 +92,9 @@ for table, columns in expected.items():
     found = {row[1] for row in cur.execute(f"PRAGMA table_info({table})")}
     missing = columns - found
     assert not missing, f"{table}: missing {sorted(missing)}"
+
+revision = cur.execute("SELECT data_structure_rev FROM dbinfos WHERE id=0").fetchone()
+assert revision == (4,), f"expected schema revision 4, got {revision}"
 
 queries = []
 for statement in qstring_literals(APP_CPP):
