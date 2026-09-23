@@ -22,11 +22,24 @@
 #include <QTime>
 #include <QTemporaryFile>
 #include <QTextDocument>
+#ifdef QUPIL_XDG_PORTAL_PRINTING
+#include <QUuid>
+#endif
 #include <QXmlStreamReader>
 #include <QtGlobal>
 #ifdef QUPIL_DESKTOP_PRINTING
 #include <QPrinter>
 #include <QPrinterInfo>
+#endif
+#ifdef QUPIL_NATIVE_WIDGET_PRINTING
+#include <QDialog>
+#include <QPrintDialog>
+#endif
+#ifdef QUPIL_XDG_PORTAL_PRINTING
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusObjectPath>
+#include <QDBusUnixFileDescriptor>
 #endif
 #include <algorithm>
 #include <iterator>
@@ -1134,6 +1147,417 @@ bool AppController::shareDocumentPdf(const QString &html, const QString &baseNam
     }
     return true;
 }
+
+#ifdef QUPIL_XDG_PORTAL_PRINTING
+namespace {
+QString portalHandleToken(const QString &prefix)
+{
+    QString uuid = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    uuid.remove(QLatin1Char('-'));
+    return prefix + QLatin1Char('_') + uuid;
+}
+
+QString portalRequestPath(const QDBusConnection &bus, const QString &token)
+{
+    QString sender = bus.baseService();
+    if (sender.startsWith(QLatin1Char(':')))
+        sender.remove(0, 1);
+    sender.replace(QLatin1Char('.'), QLatin1Char('_'));
+    return QStringLiteral("/org/freedesktop/portal/desktop/request/%1/%2")
+        .arg(sender, token);
+}
+}
+#endif
+
+bool AppController::printDocumentNative(const QString &html, const QString &title,
+                                        bool landscape)
+{
+#ifdef QUPIL_XDG_PORTAL_PRINTING
+    // QUPIL_NATIVE_PRINT_DIALOG_V2
+    // Plasma's portal backend creates/configures its QPrinter in PreparePrint().
+    // Therefore use the documented two-stage flow:
+    //   PreparePrint -> Response(token) -> Print(pdf, token).
+    // This also gives us an explicit response for cancellation and failures.
+    if (m_portalPrintInProgress) {
+        qInfo() << "QUPIL_PRINT: print request already in progress";
+        return true;
+    }
+
+    clearError();
+
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    if (!bus.isConnected()) {
+        setError(tr("The desktop print service is not available."));
+        return false;
+    }
+
+    const QString printDir = QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation))
+        .filePath(QStringLiteral("qupil-print"));
+    if (!QDir().mkpath(printDir)) {
+        setError(tr("The temporary print directory could not be created."));
+        return false;
+    }
+
+    QTemporaryFile temporary(QDir(printDir).filePath(QStringLiteral("qupil-print-XXXXXX.pdf")));
+    temporary.setAutoRemove(false);
+    if (!temporary.open()) {
+        setError(tr("The temporary print file could not be created."));
+        return false;
+    }
+    const QString filePath = temporary.fileName();
+    temporary.close();
+
+    QString error;
+    if (!writeHtmlPdf(html, filePath, title, landscape, &error)) {
+        QFile::remove(filePath);
+        setError(error);
+        return false;
+    }
+
+    m_portalPrintPdfPath = filePath;
+    m_portalPrintTitle = title;
+    m_portalPrintInProgress = true;
+
+    QVariantMap settings;
+    settings.insert(QStringLiteral("orientation"),
+                    landscape ? QStringLiteral("landscape") : QStringLiteral("portrait"));
+    settings.insert(QStringLiteral("print-pages"), QStringLiteral("all"));
+
+    QVariantMap pageSetup;
+    pageSetup.insert(QStringLiteral("PPDName"), QStringLiteral("A4"));
+    pageSetup.insert(QStringLiteral("Orientation"),
+                     landscape ? QStringLiteral("landscape") : QStringLiteral("portrait"));
+
+    const QString handleToken = portalHandleToken(QStringLiteral("qupil_prepare_print"));
+    const QString expectedPath = portalRequestPath(bus, handleToken);
+
+    QVariantMap options;
+    options.insert(QStringLiteral("handle_token"), handleToken);
+    options.insert(QStringLiteral("modal"), true);
+    options.insert(QStringLiteral("supported_output_file_formats"),
+                   QStringList{QStringLiteral("pdf")});
+
+    if (!bus.connect(QStringLiteral("org.freedesktop.portal.Desktop"),
+                     expectedPath,
+                     QStringLiteral("org.freedesktop.portal.Request"),
+                     QStringLiteral("Response"),
+                     this,
+                     SLOT(handlePortalPreparePrintResponse(uint,QVariantMap)))) {
+        setError(tr("The system print dialog response could not be monitored."));
+        finishPortalPrint();
+        return false;
+    }
+
+    m_portalPrepareRequestPath = expectedPath;
+
+    QDBusMessage request = QDBusMessage::createMethodCall(
+        QStringLiteral("org.freedesktop.portal.Desktop"),
+        QStringLiteral("/org/freedesktop/portal/desktop"),
+        QStringLiteral("org.freedesktop.portal.Print"),
+        QStringLiteral("PreparePrint"));
+    request << QString{} << title << settings << pageSetup << options;
+
+    const QDBusMessage reply = bus.call(request, QDBus::Block, 15000);
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        bus.disconnect(QStringLiteral("org.freedesktop.portal.Desktop"),
+                       expectedPath,
+                       QStringLiteral("org.freedesktop.portal.Request"),
+                       QStringLiteral("Response"),
+                       this,
+                       SLOT(handlePortalPreparePrintResponse(uint,QVariantMap)));
+        setError(tr("The system print dialog could not be opened: %1")
+                     .arg(reply.errorMessage()));
+        finishPortalPrint();
+        return false;
+    }
+    if (reply.arguments().isEmpty()) {
+        setError(tr("The system print dialog returned no request handle."));
+        finishPortalPrint();
+        return false;
+    }
+
+    const QDBusObjectPath handle = qvariant_cast<QDBusObjectPath>(reply.arguments().constFirst());
+    if (handle.path().isEmpty()) {
+        setError(tr("The system print dialog returned an invalid request handle."));
+        finishPortalPrint();
+        return false;
+    }
+
+    if (handle.path() != expectedPath) {
+        bus.disconnect(QStringLiteral("org.freedesktop.portal.Desktop"),
+                       expectedPath,
+                       QStringLiteral("org.freedesktop.portal.Request"),
+                       QStringLiteral("Response"),
+                       this,
+                       SLOT(handlePortalPreparePrintResponse(uint,QVariantMap)));
+        if (!bus.connect(QStringLiteral("org.freedesktop.portal.Desktop"),
+                         handle.path(),
+                         QStringLiteral("org.freedesktop.portal.Request"),
+                         QStringLiteral("Response"),
+                         this,
+                         SLOT(handlePortalPreparePrintResponse(uint,QVariantMap)))) {
+            setError(tr("The system print dialog response could not be monitored."));
+            finishPortalPrint();
+            return false;
+        }
+        m_portalPrepareRequestPath = handle.path();
+    }
+
+    qInfo() << "QUPIL_PRINT: PreparePrint request" << m_portalPrepareRequestPath;
+    return true;
+#elif defined(QUPIL_NATIVE_WIDGET_PRINTING)
+    // QUPIL_NATIVE_PRINT_DIALOG_DESKTOP_V3
+    // Qt's QPrintDialog delegates to the native Windows/macOS print dialog.
+    // Keep the QPrinter instance alive until the modal dialog is accepted and
+    // the QTextDocument has been sent to the selected printer.
+    clearError();
+
+    QPrinter printer(QPrinter::HighResolution);
+    if (printer.isValid()) {
+        // These are initial defaults only. If the user changes them in the
+        // native dialog, QPrintDialog writes the chosen values back to printer.
+        printer.setDocName(title);
+        printer.setPageSize(QPageSize(QPageSize::A4));
+        printer.setPageOrientation(landscape ? QPageLayout::Landscape
+                                             : QPageLayout::Portrait);
+        printer.setPageMargins(QMarginsF(10, 12, 10, 12),
+                               QPageLayout::Millimeter);
+    }
+
+    QPrintDialog dialog(&printer);
+    if (dialog.exec() != QDialog::Accepted) {
+        qInfo() << "QUPIL_PRINT: native Windows/macOS print dialog cancelled";
+        return true;
+    }
+
+    if (!printer.isValid()) {
+        setError(tr("No valid printer was selected."));
+        return true;
+    }
+
+    // The document name is application metadata rather than a page-layout
+    // choice, so restore it after the dialog without overriding paper,
+    // orientation, copies, duplex, color, or printer selection.
+    printer.setDocName(title);
+
+    QTextDocument document;
+    document.setHtml(html);
+    document.print(&printer);
+
+    if (printer.printerState() == QPrinter::Error) {
+        setError(tr("The document could not be printed."));
+        return true;
+    }
+
+    qInfo() << "QUPIL_PRINT: native Windows/macOS print job submitted to"
+            << printer.printerName();
+    return true;
+#else
+    Q_UNUSED(html)
+    Q_UNUSED(title)
+    Q_UNUSED(landscape)
+    return false;
+#endif
+}
+
+#ifdef QUPIL_XDG_PORTAL_PRINTING
+void AppController::handlePortalPreparePrintResponse(uint response, const QVariantMap &results)
+{
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    if (!m_portalPrepareRequestPath.isEmpty()) {
+        bus.disconnect(QStringLiteral("org.freedesktop.portal.Desktop"),
+                       m_portalPrepareRequestPath,
+                       QStringLiteral("org.freedesktop.portal.Request"),
+                       QStringLiteral("Response"),
+                       this,
+                       SLOT(handlePortalPreparePrintResponse(uint,QVariantMap)));
+        m_portalPrepareRequestPath.clear();
+    }
+
+    if (!m_portalPrintInProgress)
+        return;
+
+    if (response == 1) {
+        qInfo() << "QUPIL_PRINT: print dialog cancelled";
+        finishPortalPrint();
+        return;
+    }
+    if (response != 0) {
+        setError(tr("The system print dialog failed."));
+        finishPortalPrint();
+        return;
+    }
+
+    bool ok = false;
+    const uint token = results.value(QStringLiteral("token")).toUInt(&ok);
+    if (!ok || token == 0) {
+        setError(tr("The system print dialog returned no print token."));
+        finishPortalPrint();
+        return;
+    }
+
+    qInfo() << "QUPIL_PRINT: PreparePrint accepted, token" << token;
+    if (!startPortalPrintRequest(token))
+        finishPortalPrint();
+}
+
+bool AppController::startPortalPrintRequest(uint token)
+{
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    if (!bus.isConnected()) {
+        setError(tr("The desktop print service is not available."));
+        return false;
+    }
+    if (!bus.connectionCapabilities().testFlag(QDBusConnection::UnixFileDescriptorPassing)) {
+        setError(tr("The desktop print service cannot receive the document."));
+        return false;
+    }
+
+    QFile pdf(m_portalPrintPdfPath);
+    if (!pdf.open(QIODevice::ReadOnly)) {
+        setError(tr("The temporary print file could not be opened."));
+        return false;
+    }
+
+    const QDBusUnixFileDescriptor fd(pdf.handle());
+    if (!fd.isValid()) {
+        setError(tr("The temporary print file could not be passed to the desktop."));
+        return false;
+    }
+
+    const QString handleToken = portalHandleToken(QStringLiteral("qupil_print"));
+    const QString expectedPath = portalRequestPath(bus, handleToken);
+
+    QVariantMap options;
+    options.insert(QStringLiteral("handle_token"), handleToken);
+    options.insert(QStringLiteral("modal"), true);
+    options.insert(QStringLiteral("token"), token);
+    options.insert(QStringLiteral("supported_output_file_formats"),
+                   QStringList{QStringLiteral("pdf")});
+
+    if (!bus.connect(QStringLiteral("org.freedesktop.portal.Desktop"),
+                     expectedPath,
+                     QStringLiteral("org.freedesktop.portal.Request"),
+                     QStringLiteral("Response"),
+                     this,
+                     SLOT(handlePortalPrintResponse(uint,QVariantMap)))) {
+        setError(tr("The print job response could not be monitored."));
+        return false;
+    }
+
+    m_portalPrintRequestPath = expectedPath;
+
+    QDBusMessage request = QDBusMessage::createMethodCall(
+        QStringLiteral("org.freedesktop.portal.Desktop"),
+        QStringLiteral("/org/freedesktop/portal/desktop"),
+        QStringLiteral("org.freedesktop.portal.Print"),
+        QStringLiteral("Print"));
+    request << QString{} << m_portalPrintTitle << QVariant::fromValue(fd) << options;
+
+    const QDBusMessage reply = bus.call(request, QDBus::Block, 15000);
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        bus.disconnect(QStringLiteral("org.freedesktop.portal.Desktop"),
+                       expectedPath,
+                       QStringLiteral("org.freedesktop.portal.Request"),
+                       QStringLiteral("Response"),
+                       this,
+                       SLOT(handlePortalPrintResponse(uint,QVariantMap)));
+        m_portalPrintRequestPath.clear();
+        setError(tr("The print job could not be submitted: %1").arg(reply.errorMessage()));
+        return false;
+    }
+    if (reply.arguments().isEmpty()) {
+        setError(tr("The print service returned no request handle."));
+        return false;
+    }
+
+    const QDBusObjectPath handle = qvariant_cast<QDBusObjectPath>(reply.arguments().constFirst());
+    if (handle.path().isEmpty()) {
+        setError(tr("The print service returned an invalid request handle."));
+        return false;
+    }
+
+    if (handle.path() != expectedPath) {
+        bus.disconnect(QStringLiteral("org.freedesktop.portal.Desktop"),
+                       expectedPath,
+                       QStringLiteral("org.freedesktop.portal.Request"),
+                       QStringLiteral("Response"),
+                       this,
+                       SLOT(handlePortalPrintResponse(uint,QVariantMap)));
+        if (!bus.connect(QStringLiteral("org.freedesktop.portal.Desktop"),
+                         handle.path(),
+                         QStringLiteral("org.freedesktop.portal.Request"),
+                         QStringLiteral("Response"),
+                         this,
+                         SLOT(handlePortalPrintResponse(uint,QVariantMap)))) {
+            setError(tr("The print job response could not be monitored."));
+            return false;
+        }
+        m_portalPrintRequestPath = handle.path();
+    }
+
+    qInfo() << "QUPIL_PRINT: Print request" << m_portalPrintRequestPath;
+    return true;
+}
+
+void AppController::handlePortalPrintResponse(uint response, const QVariantMap &results)
+{
+    Q_UNUSED(results)
+
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    if (!m_portalPrintRequestPath.isEmpty()) {
+        bus.disconnect(QStringLiteral("org.freedesktop.portal.Desktop"),
+                       m_portalPrintRequestPath,
+                       QStringLiteral("org.freedesktop.portal.Request"),
+                       QStringLiteral("Response"),
+                       this,
+                       SLOT(handlePortalPrintResponse(uint,QVariantMap)));
+        m_portalPrintRequestPath.clear();
+    }
+
+    if (response == 0) {
+        qInfo() << "QUPIL_PRINT: print job completed";
+    } else if (response == 1) {
+        qInfo() << "QUPIL_PRINT: print job cancelled";
+    } else {
+        setError(tr("The print job failed."));
+    }
+
+    finishPortalPrint();
+}
+
+void AppController::finishPortalPrint()
+{
+    QDBusConnection bus = QDBusConnection::sessionBus();
+
+    if (!m_portalPrepareRequestPath.isEmpty()) {
+        bus.disconnect(QStringLiteral("org.freedesktop.portal.Desktop"),
+                       m_portalPrepareRequestPath,
+                       QStringLiteral("org.freedesktop.portal.Request"),
+                       QStringLiteral("Response"),
+                       this,
+                       SLOT(handlePortalPreparePrintResponse(uint,QVariantMap)));
+    }
+    if (!m_portalPrintRequestPath.isEmpty()) {
+        bus.disconnect(QStringLiteral("org.freedesktop.portal.Desktop"),
+                       m_portalPrintRequestPath,
+                       QStringLiteral("org.freedesktop.portal.Request"),
+                       QStringLiteral("Response"),
+                       this,
+                       SLOT(handlePortalPrintResponse(uint,QVariantMap)));
+    }
+
+    if (!m_portalPrintPdfPath.isEmpty())
+        QFile::remove(m_portalPrintPdfPath);
+
+    m_portalPrintPdfPath.clear();
+    m_portalPrintTitle.clear();
+    m_portalPrepareRequestPath.clear();
+    m_portalPrintRequestPath.clear();
+    m_portalPrintInProgress = false;
+}
+#endif
+
 
 QStringList AppController::availablePrinters() const
 {

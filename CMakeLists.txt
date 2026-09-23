@@ -53,6 +53,25 @@ if(NOT ANDROID AND NOT IOS)
     find_package(Qt6 6.5 REQUIRED COMPONENTS PrintSupport)
     target_link_libraries(qupil PRIVATE Qt6::PrintSupport)
     target_compile_definitions(qupil PRIVATE QUPIL_DESKTOP_PRINTING=1)
+
+    # QUPIL_NATIVE_PRINT_DIALOG_V1
+    # Linux uses the desktop Print portal directly. On Plasma this is handled
+    # by xdg-desktop-portal-kde and therefore displays the KDE print dialog.
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        find_package(Qt6 6.5 REQUIRED COMPONENTS DBus)
+        target_link_libraries(qupil PRIVATE Qt6::DBus)
+        target_compile_definitions(qupil PRIVATE QUPIL_XDG_PORTAL_PRINTING=1)
+    endif()
+
+    # QUPIL_NATIVE_PRINT_DIALOG_DESKTOP_V3
+    # Qt documents QPrintDialog as the native print dialog on Windows/macOS.
+    # QApplication is required because QPrintDialog is QWidget based.
+    # This block is inside NOT ANDROID/NOT IOS, so APPLE here means desktop macOS.
+    if(WIN32 OR APPLE)
+        find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets)
+        target_link_libraries(qupil PRIVATE Qt6::Widgets)
+        target_compile_definitions(qupil PRIVATE QUPIL_NATIVE_WIDGET_PRINTING=1)
+    endif()
 endif()
 
 qt_add_qml_module(qupil

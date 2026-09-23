@@ -58,9 +58,19 @@ RowLayout {
     }
 
     function startPrint() {
-        pendingHtml = buildDocument()
-        if (!pendingHtml.length)
+        const html = buildDocument()
+        if (!html.length)
             return
+
+        // QUPIL_NATIVE_PRINT_DIALOG_V1
+        // QUPIL_NATIVE_PRINT_DIALOG_DESKTOP_V3
+        // C++ selects the native desktop implementation:
+        // Linux portal, Windows QPrintDialog, macOS QPrintDialog.
+        if (App.printDocumentNative(html, documentTitle, landscape))
+            return
+
+        // Fallback for systems without a usable native print portal.
+        pendingHtml = html
         printerNames = App.availablePrinters()
         if (!printerNames || printerNames.length === 0)
             return
@@ -73,7 +83,13 @@ RowLayout {
     Button {
         visible: !root.mobilePlatform
         text: qsTr("Print")
-        enabled: root.printerNames.length > 0 || App.availablePrinters().length > 0
+        // Native desktop dialogs can expose platform print-to-file features
+        // even if QPrinterInfo sees no directly configured hardware printer.
+        enabled: Qt.platform.os === "linux"
+                 || Qt.platform.os === "windows"
+                 || Qt.platform.os === "osx"
+                 || root.printerNames.length > 0
+                 || App.availablePrinters().length > 0
         onClicked: root.startPrint()
     }
 

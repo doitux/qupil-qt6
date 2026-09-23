@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <QCoreApplication>
+#ifdef QUPIL_NATIVE_WIDGET_PRINTING
+#include <QApplication>
+#else
 #include <QGuiApplication>
+#endif
 #if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
 #include <QDir>
 #include <QFileInfo>
@@ -38,7 +42,11 @@ int main(int argc, char *argv[])
         }
     }
 #endif
+#ifdef QUPIL_NATIVE_WIDGET_PRINTING
+    QApplication app(argc, argv);
+#else
     QGuiApplication app(argc, argv);
+#endif
     QCoreApplication::setOrganizationName(QStringLiteral("Qupil"));
     QCoreApplication::setOrganizationDomain(QStringLiteral("qupil.org"));
     QCoreApplication::setApplicationName(QStringLiteral("Qupil"));

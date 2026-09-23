@@ -70,6 +70,8 @@ public:
                                         const QString &title, bool landscape = false);
     Q_INVOKABLE bool shareDocumentPdf(const QString &html, const QString &baseName,
                                        const QString &title, bool landscape = false);
+    Q_INVOKABLE bool printDocumentNative(const QString &html, const QString &title,
+                                          bool landscape = false);
     Q_INVOKABLE QStringList availablePrinters() const;
     Q_INVOKABLE QString defaultPrinterName() const;
     Q_INVOKABLE bool printDocument(const QString &html, const QString &printerName,
@@ -141,6 +143,12 @@ signals:
     void pupilFilterChanged();
     void dataChanged();
 
+#ifdef QUPIL_XDG_PORTAL_PRINTING
+private slots:
+    void handlePortalPreparePrintResponse(uint response, const QVariantMap &results);
+    void handlePortalPrintResponse(uint response, const QVariantMap &results);
+#endif
+
 private:
     QVector<QVariantMap> selectRows(const QString &sql, const QVariantList &binds = {}) const;
     QVariantMap selectOne(const QString &sql, const QVariantList &binds = {}) const;
@@ -166,6 +174,17 @@ private:
     static QString lessonTypeName(int type);
     static QString recitalStateName(int state);
     static QString reminderModeName(int mode);
+
+#ifdef QUPIL_XDG_PORTAL_PRINTING
+    bool startPortalPrintRequest(uint token);
+    void finishPortalPrint();
+
+    QString m_portalPrintPdfPath;
+    QString m_portalPrintTitle;
+    QString m_portalPrepareRequestPath;
+    QString m_portalPrintRequestPath;
+    bool m_portalPrintInProgress = false;
+#endif
 
     DatabaseManager m_database;
     bool m_ready = false;
