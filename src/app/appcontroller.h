@@ -165,7 +165,12 @@ private:
     void refreshLibrary();
     void refreshRecitals();
     void refreshArchive();
-    void updateLessonAutoName(int lessonId);
+    QVariantMap lessonRecord(int lessonId) const;
+    QString lessonDisplayName(int lessonId) const;
+    QString archivedLessonDisplayName(int lastLessonNameId) const;
+    QString formatAutomaticLessonName(int type, int durationMinutes, const QString &locationToken,
+                                      const QString &pupilToken) const;
+    QString activeAutomaticLessonName(const QVariantMap &lessonRow, const QVariantList &members) const;
     QString buildPupilArchiveHtml(int pupilId) const;
     void importLegacySettings();
     QString legacyConfigPath() const;

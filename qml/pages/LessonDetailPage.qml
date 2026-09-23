@@ -101,4 +101,5 @@ Page {
 
     Popup { id: saved; anchors.centerIn: parent; Label { text: qsTr("Saved") } }
     Component.onCompleted: load()
+    Connections { target: Language; function onEffectiveLanguageChanged() { if (root.lessonId >= 0) root.load() } }
 }

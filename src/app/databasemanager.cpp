@@ -292,6 +292,8 @@ bool DatabaseManager::ensureSchema()
     }
 
     if (!exec(QStringLiteral("UPDATE activity SET continousstopdate='9999-99-99' WHERE continousstopdate IS NULL")) ||
+        !exec(QStringLiteral("UPDATE lesson SET lessonname=NULL WHERE COALESCE(autolessonname,1)=1")) ||
+        !exec(QStringLiteral("UPDATE lastlessonname SET lessonname=NULL WHERE namekind=2")) ||
         !exec(QStringLiteral("INSERT OR IGNORE INTO piececomposer (piececomposerid, composer) VALUES (1, '')")) ||
         !exec(QStringLiteral("INSERT OR IGNORE INTO smlauthor (smlauthorid, author) VALUES (1, '')")) ||
         !exec(QStringLiteral("INSERT OR IGNORE INTO smlpublisher (smlpublisherid, publisher) VALUES (1, '')")) ||

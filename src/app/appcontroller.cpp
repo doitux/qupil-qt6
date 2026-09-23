@@ -594,14 +594,15 @@ void AppController::refreshPupils()
 void AppController::refreshLessons()
 {
     auto rows = selectRows(QStringLiteral(
-        "SELECT l.lessonid AS id, COALESCE(l.lessonname,'') AS name, l.type AS type, "
+        "SELECT l.lessonid AS id, l.type AS type, "
         "l.lessonday AS day, COALESCE(l.lessonstarttime,'') AS start, COALESCE(l.lessonstoptime,'') AS stop, "
         "COALESCE(l.lessonlocation,'') AS location, COALESCE(l.unsteadylesson,0) AS unsteady, "
         "COALESCE(GROUP_CONCAT(TRIM(p.forename || ' ' || p.surname), ', '), '') AS pupilNames "
         "FROM lesson l LEFT JOIN pupilatlesson pal ON pal.lessonid=l.lessonid AND pal.stopdate > date('now') "
         "LEFT JOIN pupil p ON p.pupilid=pal.pupilid WHERE l.state=1 "
-        "GROUP BY l.lessonid ORDER BY CASE WHEN l.unsteadylesson=1 THEN 8 ELSE COALESCE(l.lessonday,8) END, l.lessonstarttime, l.lessonname"));
+        "GROUP BY l.lessonid ORDER BY CASE WHEN l.unsteadylesson=1 THEN 8 ELSE COALESCE(l.lessonday,8) END, l.lessonstarttime, l.lessonid"));
     for (auto &row : rows) {
+        row.insert(QStringLiteral("name"), lessonDisplayName(row.value(QStringLiteral("id")).toInt()));
         row.insert(QStringLiteral("typeName"), lessonTypeName(row.value(QStringLiteral("type")).toInt()));
         row.insert(QStringLiteral("dayName"), row.value(QStringLiteral("unsteady")).toInt()
                        ? tr("Irregular") : dayName(row.value(QStringLiteral("day")).toInt()));
@@ -685,13 +686,15 @@ QVariantList AppController::todayLessons() const
     QVariantList result;
     const int day = QDate::currentDate().dayOfWeek() - 1;
     const auto rows = selectRows(QStringLiteral(
-        "SELECT l.lessonid AS id, l.lessonname AS name, l.lessonstarttime AS start, l.lessonstoptime AS stop, "
+        "SELECT l.lessonid AS id, l.lessonstarttime AS start, l.lessonstoptime AS stop, "
         "l.lessonlocation AS location, COALESCE(GROUP_CONCAT(TRIM(p.forename || ' ' || p.surname), ', '),'') AS pupils "
         "FROM lesson l LEFT JOIN pupilatlesson pal ON pal.lessonid=l.lessonid AND pal.stopdate > date('now') "
         "LEFT JOIN pupil p ON p.pupilid=pal.pupilid "
         "WHERE l.state=1 AND l.unsteadylesson=0 AND l.lessonday=? GROUP BY l.lessonid ORDER BY l.lessonstarttime"), {day});
-    for (const auto &row : rows)
+    for (QVariantMap row : rows) {
+        row.insert(QStringLiteral("name"), lessonDisplayName(row.value(QStringLiteral("id")).toInt()));
         result.push_back(row);
+    }
     return result;
 }
 
@@ -699,12 +702,13 @@ QVariantList AppController::scheduleForDay(int day) const
 {
     QVariantList result;
     const auto rows = selectRows(QStringLiteral(
-        "SELECT l.lessonid AS id, COALESCE(l.lessonname,'') AS name, COALESCE(l.type,1) AS type, "
+        "SELECT l.lessonid AS id, COALESCE(l.type,1) AS type, "
         "COALESCE(l.lessonstarttime,'') AS start, COALESCE(l.lessonstoptime,'') AS stop, "
         "COALESCE(l.lessonlocation,'') AS location "
         "FROM lesson l WHERE l.state=1 AND l.unsteadylesson=0 AND l.lessonday=? "
-        "ORDER BY l.lessonstarttime,l.lessonname"), {day});
+        "ORDER BY l.lessonstarttime,l.lessonid"), {day});
     for (QVariantMap row : rows) {
+        row.insert(QStringLiteral("name"), lessonDisplayName(row.value(QStringLiteral("id")).toInt()));
         const auto memberships = selectRows(QStringLiteral(
             "SELECT pal.palid AS palId, p.pupilid AS pupilId, "
             "TRIM(COALESCE(p.forename,'') || ' ' || COALESCE(p.surname,'')) AS pupilName "
@@ -734,16 +738,17 @@ QString AppController::timetableDocumentHtml() const
         QVector<QVariantMap> lessons;
         if (day < 7) {
             lessons = selectRows(QStringLiteral(
-                "SELECT lessonid AS id, COALESCE(lessonname,'') AS name, COALESCE(lessonstarttime,'') AS start, "
+                "SELECT lessonid AS id, COALESCE(lessonstarttime,'') AS start, "
                 "COALESCE(lessonstoptime,'') AS stop FROM lesson WHERE state=1 AND lessonday=? ORDER BY lessonstarttime ASC"), {day});
         } else {
             lessons = selectRows(QStringLiteral(
-                "SELECT lessonid AS id, COALESCE(lessonname,'') AS name FROM lesson WHERE state=1 AND unsteadylesson=1"));
+                "SELECT lessonid AS id FROM lesson WHERE state=1 AND unsteadylesson=1 ORDER BY lessonid"));
         }
         if (lessons.isEmpty())
             continue;
         rowsHtml += QStringLiteral("<tr><td colspan='3'><h2>%1</h2></td></tr>").arg(days.at(day).toHtmlEscaped());
         for (const QVariantMap &lesson : lessons) {
+            const QString lessonName = lessonDisplayName(lesson.value(QStringLiteral("id")).toInt());
             const auto pupils = selectRows(QStringLiteral(
                 "SELECT COALESCE(p.surname,'') AS surname, COALESCE(p.forename,'') AS forename "
                 "FROM pupilatlesson pal, pupil p WHERE pal.lessonid=? AND p.pupilid=pal.pupilid "
@@ -755,10 +760,10 @@ QString AppController::timetableDocumentHtml() const
             if (day < 7) {
                 rowsHtml += QStringLiteral("<tr><td><b>%1 - %2</b></td><td>%3</td><td>%4</td></tr>")
                     .arg(htmlCell(lesson.value(QStringLiteral("start"))), htmlCell(lesson.value(QStringLiteral("stop"))),
-                         htmlCell(lesson.value(QStringLiteral("name"))), names.join(QStringLiteral("<br>")));
+                         lessonName.toHtmlEscaped(), names.join(QStringLiteral("<br>")));
             } else {
                 rowsHtml += QStringLiteral("<tr><td colspan='2'><b>%1</b></td><td>%2</td></tr>")
-                    .arg(htmlCell(lesson.value(QStringLiteral("name"))), names.join(QStringLiteral("<br>")));
+                    .arg(lessonName.toHtmlEscaped(), names.join(QStringLiteral("<br>")));
             }
         }
     }
@@ -789,18 +794,19 @@ QString AppController::dayOverviewDocumentHtml(int day, int noteCount, int freeS
         tableHead = QStringLiteral("<tr><th>%1</th><th>%2</th><th>%3</th></tr>")
             .arg(tr("Time").toHtmlEscaped(), tr("Lesson").toHtmlEscaped(), tr("Pupil").toHtmlEscaped());
         lessons = selectRows(QStringLiteral(
-            "SELECT lessonid AS id, COALESCE(lessonname,'') AS name, COALESCE(lessonstarttime,'') AS start, "
+            "SELECT lessonid AS id, COALESCE(lessonstarttime,'') AS start, "
             "COALESCE(lessonstoptime,'') AS stop FROM lesson WHERE state=1 AND lessonday=? ORDER BY lessonstarttime ASC"), {day});
     } else {
         dayString = tr("irregular dates");
         tableHead = QStringLiteral("<tr><th>%1</th><th>%2</th></tr>")
             .arg(tr("Lesson").toHtmlEscaped(), tr("Pupil").toHtmlEscaped());
         lessons = selectRows(QStringLiteral(
-            "SELECT lessonid AS id, COALESCE(lessonname,'') AS name FROM lesson WHERE state=1 AND unsteadylesson=1"));
+            "SELECT lessonid AS id FROM lesson WHERE state=1 AND unsteadylesson=1 ORDER BY lessonid"));
     }
 
     QString rowsHtml;
     for (const QVariantMap &lesson : lessons) {
+        const QString lessonName = lessonDisplayName(lesson.value(QStringLiteral("id")).toInt());
         const auto pupils = selectRows(QStringLiteral(
             "SELECT pal.palid AS palId, COALESCE(p.forename,'') AS forename, COALESCE(p.surname,'') AS surname "
             "FROM pupilatlesson pal, pupil p WHERE pal.lessonid=? AND p.pupilid=pal.pupilid "
@@ -815,10 +821,10 @@ QString AppController::dayOverviewDocumentHtml(int day, int noteCount, int freeS
         if (day < 7)
             rowsHtml += QStringLiteral("<tr><td><h3>%1 - %2</h3></td><td><h3>%3</h3></td><td>%4</td></tr>")
                 .arg(htmlCell(lesson.value(QStringLiteral("start"))), htmlCell(lesson.value(QStringLiteral("stop"))),
-                     htmlCell(lesson.value(QStringLiteral("name"))), names.join(QStringLiteral("<br>")));
+                     lessonName.toHtmlEscaped(), names.join(QStringLiteral("<br>")));
         else
             rowsHtml += QStringLiteral("<tr><td><h3>%1</h3></td><td>%2</td></tr>")
-                .arg(htmlCell(lesson.value(QStringLiteral("name"))), names.join(QStringLiteral("<br>")));
+                .arg(lessonName.toHtmlEscaped(), names.join(QStringLiteral("<br>")));
 
         rowsHtml += day < 7 ? QStringLiteral("<tr><td colspan='3'>") : QStringLiteral("<tr><td colspan='2'>");
         if (freeSpaceCm > 0)
@@ -1917,10 +1923,10 @@ QString AppController::buildPupilArchiveHtml(int pupilId) const
     if(lessonCount){
         body += QStringLiteral("<h2><u>%1:</u></h2>").arg(tr("Lesson notes and music pieces").toHtmlEscaped());
         struct Membership {int palId; QString name,start,stop; bool active;}; QVector<Membership> ms;
-        const auto old=selectRows(QStringLiteral("SELECT pal.palid AS palId, COALESCE(lln.lessonname,'') AS name, COALESCE(pal.startdate,'') AS start, COALESCE(pal.stopdate,'') AS stop FROM pupilatlesson pal,lastlessonname lln WHERE pal.llnid=lln.llnid AND pal.pupilid=? AND pal.stopdate <= date('now')"),{pupilId});
-        for(const QVariantMap&r:old) ms.push_back({r.value(QStringLiteral("palId")).toInt(),r.value(QStringLiteral("name")).toString(),r.value(QStringLiteral("start")).toString(),r.value(QStringLiteral("stop")).toString(),false});
-        const auto active=selectRows(QStringLiteral("SELECT pal.palid AS palId, COALESCE(l.lessonname,'') AS name, COALESCE(pal.startdate,'') AS start FROM pupilatlesson pal,lesson l WHERE pal.pupilid=? AND pal.lessonid=l.lessonid AND pal.stopdate > date('now') ORDER BY pal.startdate ASC"),{pupilId});
-        for(const QVariantMap&r:active) ms.push_back({r.value(QStringLiteral("palId")).toInt(),r.value(QStringLiteral("name")).toString(),r.value(QStringLiteral("start")).toString(),QString(),true});
+        const auto old=selectRows(QStringLiteral("SELECT pal.palid AS palId, pal.llnid AS llnId, COALESCE(pal.startdate,'') AS start, COALESCE(pal.stopdate,'') AS stop FROM pupilatlesson pal WHERE pal.llnid IS NOT NULL AND pal.pupilid=? AND pal.stopdate <= date('now')"),{pupilId});
+        for(const QVariantMap&r:old) ms.push_back({r.value(QStringLiteral("palId")).toInt(),archivedLessonDisplayName(r.value(QStringLiteral("llnId")).toInt()),r.value(QStringLiteral("start")).toString(),r.value(QStringLiteral("stop")).toString(),false});
+        const auto active=selectRows(QStringLiteral("SELECT pal.palid AS palId, l.lessonid AS lessonId, COALESCE(pal.startdate,'') AS start FROM pupilatlesson pal,lesson l WHERE pal.pupilid=? AND pal.lessonid=l.lessonid AND pal.stopdate > date('now') ORDER BY pal.startdate ASC"),{pupilId});
+        for(const QVariantMap&r:active) ms.push_back({r.value(QStringLiteral("palId")).toInt(),lessonDisplayName(r.value(QStringLiteral("lessonId")).toInt()),r.value(QStringLiteral("start")).toString(),QString(),true});
         body += QStringLiteral("<p><b>%1:</b></p><ol>").arg(tr("The student took part in the following lessons").toHtmlEscaped());
         for(const Membership&m:ms) body += QStringLiteral("<li>%1 (%2 %3%4)</li>").arg(m.name.toHtmlEscaped(),m.active?tr("since").toHtmlEscaped():tr("from").toHtmlEscaped(),formattedIsoDate(m.start).toHtmlEscaped(),m.active?QString():QStringLiteral(" %1 %2").arg(tr("to").toHtmlEscaped(),formattedIsoDate(m.stop).toHtmlEscaped()));
         body += QStringLiteral("</ol>");
@@ -1973,25 +1979,29 @@ QVariantList AppController::pupilLessonMemberships(int pupilId) const
 {
     QVariantList result;
     const auto rows = selectRows(QStringLiteral(
-        "SELECT pal.palid AS palId, l.lessonid AS lessonId, COALESCE(l.lessonname,'') AS lessonName, "
+        "SELECT pal.palid AS palId, l.lessonid AS lessonId, "
         "pal.startdate AS startDate, pal.stopdate AS stopDate, l.state AS lessonState "
         "FROM pupilatlesson pal JOIN lesson l ON l.lessonid=pal.lessonid "
-        "WHERE pal.pupilid=? AND pal.stopdate > date('now') ORDER BY l.lessonname"), {pupilId});
-    for (const auto &row : rows)
+        "WHERE pal.pupilid=? AND pal.stopdate > date('now') ORDER BY pal.startdate,l.lessonid"), {pupilId});
+    for (QVariantMap row : rows) {
+        row.insert(QStringLiteral("lessonName"), lessonDisplayName(row.value(QStringLiteral("lessonId")).toInt()));
         result << row;
+    }
     return result;
 }
 
 QVariantMap AppController::lessonMembershipContext(int palId) const
 {
-    return selectOne(QStringLiteral(
+    QVariantMap row = selectOne(QStringLiteral(
         "SELECT pal.palid AS palId, pal.pupilid AS pupilId, l.lessonid AS lessonId, "
         "TRIM(COALESCE(p.forename,'') || ' ' || COALESCE(p.surname,'')) AS pupilName, "
-        "COALESCE(l.lessonname,'') AS lessonName, COALESCE(l.lessonstarttime,'') AS start, "
-        "COALESCE(l.lessonstoptime,'') AS stop, COALESCE(l.lessonlocation,'') AS location, "
-        "COALESCE(l.type,1) AS type "
+        "COALESCE(l.lessonstarttime,'') AS start, COALESCE(l.lessonstoptime,'') AS stop, "
+        "COALESCE(l.lessonlocation,'') AS location, COALESCE(l.type,1) AS type "
         "FROM pupilatlesson pal JOIN pupil p ON p.pupilid=pal.pupilid "
         "JOIN lesson l ON l.lessonid=pal.lessonid WHERE pal.palid=?"), {palId});
+    if (!row.isEmpty())
+        row.insert(QStringLiteral("lessonName"), lessonDisplayName(row.value(QStringLiteral("lessonId")).toInt()));
+    return row;
 }
 
 QVariantList AppController::notesForMembership(int palId) const
@@ -2038,13 +2048,18 @@ QVariantList AppController::notesForPupil(int pupilId) const
 {
     QVariantList result;
     const auto rows = selectRows(QStringLiteral(
-        "SELECT n.noteid AS id, n.cnoteid AS commonId, n.palid AS palId, COALESCE(l.lessonname,lln.lessonname,'') AS lessonName, "
+        "SELECT n.noteid AS id, n.cnoteid AS commonId, n.palid AS palId, "
+        "pal.lessonid AS lessonId, pal.llnid AS llnId, "
         "COALESCE(n.date,'') AS date, COALESCE(n.content,'') AS content "
         "FROM note n JOIN pupilatlesson pal ON pal.palid=n.palid "
-        "LEFT JOIN lesson l ON l.lessonid=pal.lessonid LEFT JOIN lastlessonname lln ON lln.llnid=pal.llnid "
         "WHERE pal.pupilid=? ORDER BY n.date DESC, n.noteid DESC"), {pupilId});
-    for (const auto &row : rows)
+    for (QVariantMap row : rows) {
+        const QVariant llnId = row.value(QStringLiteral("llnId"));
+        row.insert(QStringLiteral("lessonName"), !llnId.isNull()
+                       ? archivedLessonDisplayName(llnId.toInt())
+                       : lessonDisplayName(row.value(QStringLiteral("lessonId")).toInt()));
         result << row;
+    }
     return result;
 }
 
@@ -2055,14 +2070,17 @@ QVariantList AppController::piecesForPupil(int pupilId) const
         "SELECT p.pieceid AS id, p.cpieceid AS commonId, p.palid AS palId, COALESCE(pc.composer,'') AS composer, "
         "COALESCE(p.title,'') AS title, COALESCE(p.genre,'') AS genre, COALESCE(p.duration,0) AS duration, "
         "COALESCE(p.startdate,'') AS startDate, COALESCE(p.stopdate,'') AS stopDate, COALESCE(p.state,0) AS state, "
-        "COALESCE(l.lessonname,lln.lessonname,'') AS lessonName "
+        "pal.lessonid AS lessonId, pal.llnid AS llnId "
         "FROM piece p JOIN pupilatlesson pal ON pal.palid=p.palid "
-        "LEFT JOIN lesson l ON l.lessonid=pal.lessonid LEFT JOIN lastlessonname lln ON lln.llnid=pal.llnid "
         "LEFT JOIN piececomposer pc ON pc.piececomposerid=p.piececomposerid "
         "WHERE pal.pupilid=? ORDER BY p.startdate DESC, p.pieceid DESC"), {pupilId});
     const QStringList states = {tr("Planned"), tr("In progress"), tr("Paused"), tr("Ready for concert"), tr("Finished")};
     for (auto &row : rows) {
         const int state = row.value(QStringLiteral("state")).toInt();
+        const QVariant llnId = row.value(QStringLiteral("llnId"));
+        row.insert(QStringLiteral("lessonName"), !llnId.isNull()
+                       ? archivedLessonDisplayName(llnId.toInt())
+                       : lessonDisplayName(row.value(QStringLiteral("lessonId")).toInt()));
         row.insert(QStringLiteral("stateName"), state >= 0 && state < states.size() ? states.at(state) : tr("Unknown"));
         result << row;
     }
@@ -2305,14 +2323,103 @@ bool AppController::deleteActivity(int activityId)
     return true;
 }
 
-QVariantMap AppController::lesson(int lessonId) const
+QVariantMap AppController::lessonRecord(int lessonId) const
 {
     return selectOne(QStringLiteral(
         "SELECT lessonid AS id, COALESCE(state,1) AS state, COALESCE(type,1) AS type, "
-        "COALESCE(autolessonname,1) AS autoName, COALESCE(lessonname,'') AS name, "
+        "COALESCE(autolessonname,1) AS autoName, COALESCE(lessonname,'') AS manualName, "
         "COALESCE(unsteadylesson,1) AS irregular, COALESCE(lessonday,0) AS day, "
         "COALESCE(lessonstarttime,'') AS start, COALESCE(lessonstoptime,'') AS stop, "
         "COALESCE(lessonlocation,'') AS location FROM lesson WHERE lessonid=?"), {lessonId});
+}
+
+QString AppController::formatAutomaticLessonName(int type, int durationMinutes,
+                                                  const QString &locationToken,
+                                                  const QString &pupilToken) const
+{
+    QString name;
+    switch (type) {
+    case 1: name = QCoreApplication::translate("LessonName", "IL-"); break;
+    case 2: name = QCoreApplication::translate("LessonName", "GL-"); break;
+    case 3: name = QCoreApplication::translate("LessonName", "EnsL-"); break;
+    default: name = QStringLiteral("L-"); break;
+    }
+
+    if (durationMinutes >= 0)
+        name += QString::number(durationMinutes) + QLatin1Char('-');
+    if (!locationToken.isEmpty())
+        name += locationToken + QLatin1Char('-');
+    name += pupilToken;
+    return name;
+}
+
+QString AppController::activeAutomaticLessonName(const QVariantMap &lessonRow,
+                                                   const QVariantList &members) const
+{
+    int durationMinutes = -1;
+    if (!lessonRow.value(QStringLiteral("irregular")).toBool()) {
+        const QTime start = QTime::fromString(lessonRow.value(QStringLiteral("start")).toString(), QStringLiteral("hh:mm"));
+        const QTime stop = QTime::fromString(lessonRow.value(QStringLiteral("stop")).toString(), QStringLiteral("hh:mm"));
+        if (start.isValid() && stop.isValid())
+            durationMinutes = start.secsTo(stop) / 60;
+    }
+
+    const QString locationToken = lessonRow.value(QStringLiteral("location")).toString().trimmed().left(3);
+    QString pupilToken;
+    if (!members.isEmpty()) {
+        if (lessonRow.value(QStringLiteral("type")).toInt() == 1) {
+            const QVariantMap first = members.constFirst().toMap();
+            pupilToken = first.value(QStringLiteral("forename")).toString().left(3)
+                       + first.value(QStringLiteral("surname")).toString().left(3);
+        } else {
+            for (const QVariant &item : members)
+                pupilToken += item.toMap().value(QStringLiteral("forename")).toString().left(1);
+        }
+    }
+    return formatAutomaticLessonName(lessonRow.value(QStringLiteral("type")).toInt(),
+                                     durationMinutes, locationToken, pupilToken);
+}
+
+QString AppController::lessonDisplayName(int lessonId) const
+{
+    const QVariantMap row = lessonRecord(lessonId);
+    if (row.isEmpty())
+        return {};
+    if (!row.value(QStringLiteral("autoName")).toBool())
+        return row.value(QStringLiteral("manualName")).toString();
+    return activeAutomaticLessonName(row, lessonPupils(lessonId));
+}
+
+QString AppController::archivedLessonDisplayName(int lastLessonNameId) const
+{
+    const QVariantMap row = selectOne(QStringLiteral(
+        "SELECT COALESCE(lessonname,'') AS literalName, COALESCE(namekind,0) AS nameKind, "
+        "lessontype AS lessonType, durationminutes AS durationMinutes, "
+        "COALESCE(locationtoken,'') AS locationToken, COALESCE(pupiltoken,'') AS pupilToken, "
+        "COALESCE(formatrev,1) AS formatRev FROM lastlessonname WHERE llnid=?"), {lastLessonNameId});
+    if (row.isEmpty())
+        return {};
+    if (row.value(QStringLiteral("nameKind")).toInt() != LastLessonNameAutomaticV1
+        || row.value(QStringLiteral("formatRev")).toInt() != LastLessonNameFormatV1) {
+        return row.value(QStringLiteral("literalName")).toString();
+    }
+
+    const QVariant duration = row.value(QStringLiteral("durationMinutes"));
+    return formatAutomaticLessonName(row.value(QStringLiteral("lessonType")).toInt(),
+                                     duration.isNull() ? -1 : duration.toInt(),
+                                     row.value(QStringLiteral("locationToken")).toString(),
+                                     row.value(QStringLiteral("pupilToken")).toString());
+}
+
+QVariantMap AppController::lesson(int lessonId) const
+{
+    QVariantMap row = lessonRecord(lessonId);
+    if (row.isEmpty())
+        return row;
+    row.insert(QStringLiteral("name"), row.value(QStringLiteral("autoName")).toBool()
+                   ? activeAutomaticLessonName(row, lessonPupils(lessonId))
+                   : row.value(QStringLiteral("manualName")).toString());
+    return row;
 }
 
 int AppController::saveLesson(const QVariantMap &v)
@@ -2320,7 +2427,10 @@ int AppController::saveLesson(const QVariantMap &v)
     const int id = v.value(QStringLiteral("id"), -1).toInt();
     const int type = v.value(QStringLiteral("type"), 1).toInt();
     const int autoName = v.value(QStringLiteral("autoName"), true).toBool() ? 1 : 0;
-    const QString name = v.value(QStringLiteral("name")).toString();
+    const QString requestedName = v.value(QStringLiteral("name")).toString();
+    const QVariant storedName = autoName
+        ? QVariant{}
+        : QVariant(requestedName.isEmpty() && id < 0 ? tr("New lesson") : requestedName);
     const int irregular = v.value(QStringLiteral("irregular"), false).toBool() ? 1 : 0;
     const int day = irregular ? -1 : v.value(QStringLiteral("day"), 0).toInt();
     const QString start = irregular ? QString{} : v.value(QStringLiteral("start")).toString();
@@ -2332,58 +2442,17 @@ int AppController::saveLesson(const QVariantMap &v)
         resultId = int(insert(QStringLiteral(
             "INSERT INTO lesson (state,type,autolessonname,lessonname,unsteadylesson,lessonday,lessonstarttime,lessonstoptime,lessonlocation) "
             "VALUES (1,?,?,?,?,?,?,?,?)"),
-            {type, autoName, name.isEmpty() ? tr("New lesson") : name, irregular, day, start, stop, location}));
+            {type, autoName, storedName, irregular, day, start, stop, location}));
     } else {
         if (!execute(QStringLiteral(
             "UPDATE lesson SET type=?,autolessonname=?,lessonname=?,unsteadylesson=?,lessonday=?,lessonstarttime=?,lessonstoptime=?,lessonlocation=? "
-            "WHERE lessonid=?"), {type, autoName, name, irregular, day, start, stop, location, id}))
+            "WHERE lessonid=?"), {type, autoName, storedName, irregular, day, start, stop, location, id}))
             return -1;
     }
 
-    if (resultId >= 0 && autoName)
-        updateLessonAutoName(resultId);
     refreshLessons();
     emit dataChanged();
     return resultId;
-}
-
-void AppController::updateLessonAutoName(int lessonId)
-{
-    const QVariantMap l = lesson(lessonId);
-    if (l.isEmpty() || !l.value(QStringLiteral("autoName")).toBool())
-        return;
-
-    QString name;
-    switch (l.value(QStringLiteral("type")).toInt()) {
-    case 1: name = tr("IL-"); break;
-    case 2: name = tr("GL-"); break;
-    case 3: name = tr("EnsL-"); break;
-    default: name = QStringLiteral("L-"); break;
-    }
-
-    if (!l.value(QStringLiteral("irregular")).toBool()) {
-        const QTime start = QTime::fromString(l.value(QStringLiteral("start")).toString(), QStringLiteral("hh:mm"));
-        const QTime stop = QTime::fromString(l.value(QStringLiteral("stop")).toString(), QStringLiteral("hh:mm"));
-        if (start.isValid() && stop.isValid())
-            name += QString::number(start.secsTo(stop) / 60) + QLatin1Char('-');
-    }
-
-    const QString location = l.value(QStringLiteral("location")).toString().trimmed();
-    if (!location.isEmpty())
-        name += location.left(3) + QLatin1Char('-');
-
-    const auto members = lessonPupils(lessonId);
-    if (!members.isEmpty()) {
-        if (l.value(QStringLiteral("type")).toInt() == 1) {
-            const auto first = members.constFirst().toMap();
-            name += first.value(QStringLiteral("forename")).toString().left(3)
-                    + first.value(QStringLiteral("surname")).toString().left(3);
-        } else {
-            for (const QVariant &item : members)
-                name += item.toMap().value(QStringLiteral("forename")).toString().left(1);
-        }
-    }
-    execute(QStringLiteral("UPDATE lesson SET lessonname=? WHERE lessonid=?"), {name, lessonId});
 }
 
 QVariantList AppController::lessonPupils(int lessonId) const
@@ -2430,7 +2499,6 @@ bool AppController::addPupilToLesson(int lessonId, int pupilId)
         "INSERT INTO pupilatlesson (lessonid,pupilid,startdate,stopdate) VALUES (?,?,?,'9999-99-99')"),
         {lessonId, pupilId, isoToday()}) < 0)
         return false;
-    updateLessonAutoName(lessonId);
     refreshLessons();
     emit dataChanged();
     return true;
@@ -2483,7 +2551,7 @@ bool AppController::removePupilFromLesson(int lessonId, int pupilId)
             "INSERT INTO lastlessonname "
             "(lessonname,namekind,lessontype,durationminutes,locationtoken,pupiltoken,formatrev) "
             "VALUES (?,?,?,?,?,?,?)"),
-            {membership.value(QStringLiteral("lessonName")),
+            {autoName ? QVariant{} : membership.value(QStringLiteral("lessonName")),
              autoName ? LastLessonNameAutomaticV1 : LastLessonNameManualLiteral,
              autoName ? membership.value(QStringLiteral("lessonType")) : QVariant{},
              autoName && durationMinutes >= 0 ? QVariant(durationMinutes) : QVariant{},
@@ -2501,7 +2569,6 @@ bool AppController::removePupilFromLesson(int lessonId, int pupilId)
     }
     if (!ok)
         return false;
-    updateLessonAutoName(lessonId);
     refreshLessons();
     emit dataChanged();
     return true;
@@ -2596,10 +2663,11 @@ QVariantList AppController::lessonEndWarnings() const
     const QDate today = QDate::currentDate();
     const QTime now = QTime::currentTime();
     const auto rows = selectRows(QStringLiteral(
-        "SELECT lessonid AS id, COALESCE(lessonname,'') AS name, lessonstoptime AS stop "
+        "SELECT lessonid AS id, lessonstoptime AS stop "
         "FROM lesson WHERE state=1 AND lessonday=? ORDER BY lessonstoptime"), {today.dayOfWeek() - 1});
 
-    for (const auto &row : rows) {
+    for (QVariantMap row : rows) {
+        row.insert(QStringLiteral("name"), lessonDisplayName(row.value(QStringLiteral("id")).toInt()));
         const QTime stop = QTime::fromString(row.value(QStringLiteral("stop")).toString(), QStringLiteral("HH:mm"));
         if (!stop.isValid())
             continue;
@@ -2841,12 +2909,14 @@ QVariantList AppController::readyPieces() const
     const auto rows = selectRows(QStringLiteral(
         "SELECT MIN(p.pieceid) AS id, p.cpieceid AS commonId, COALESCE(pc.composer,'') AS composer, "
         "COALESCE(p.title,'') AS title, COALESCE(p.genre,'') AS genre, COALESCE(p.duration,0) AS duration, "
-        "COALESCE(l.lessonname,'') AS lessonName, COALESCE(GROUP_CONCAT(TRIM(pu.forename || ' ' || pu.surname), ', '),'') AS pupils "
+        "MIN(l.lessonid) AS lessonId, COALESCE(GROUP_CONCAT(TRIM(pu.forename || ' ' || pu.surname), ', '),'') AS pupils "
         "FROM piece p JOIN pupilatlesson pal ON pal.palid=p.palid JOIN pupil pu ON pu.pupilid=pal.pupilid "
         "JOIN lesson l ON l.lessonid=pal.lessonid LEFT JOIN piececomposer pc ON pc.piececomposerid=p.piececomposerid "
         "WHERE p.state=3 AND pal.stopdate > date('now') GROUP BY p.cpieceid ORDER BY pu.birthday,p.title"));
-    for (const auto &row : rows)
+    for (QVariantMap row : rows) {
+        row.insert(QStringLiteral("lessonName"), lessonDisplayName(row.value(QStringLiteral("lessonId")).toInt()));
         result << row;
+    }
     return result;
 }
 

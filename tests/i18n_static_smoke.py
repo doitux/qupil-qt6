@@ -9,6 +9,7 @@ main = (ROOT / "src/app/main.cpp").read_text(encoding="utf-8")
 app = (ROOT / "src/app/appcontroller.cpp").read_text(encoding="utf-8")
 schedule = (ROOT / "qml/pages/SchedulePage.qml").read_text(encoding="utf-8")
 settings = (ROOT / "qml/pages/SettingsPage.qml").read_text(encoding="utf-8")
+lesson_detail = (ROOT / "qml/pages/LessonDetailPage.qml").read_text(encoding="utf-8")
 ts_path = ROOT / "i18n/qupil_de.ts"
 
 # Translator must be installed before AppController populates translated roles.
@@ -39,6 +40,8 @@ assert all(f'tr("{day}")' in day_body for day in
 # Imperatively cached QML result sets must reload after C++ models are refreshed.
 assert "target: App" in schedule and re.search(r"function\s+onDataChanged\(\)\s*\{.*?root\.reload\(\)", schedule, re.S)
 assert "target: Language" in settings and "onEffectiveLanguageChanged() { root.load() }" in settings
+assert "target: Language" in lesson_detail and re.search(
+    r"function\s+onEffectiveLanguageChanged\(\)\s*\{.*?root\.load\(\)", lesson_detail, re.S)
 
 # Validate the translated dynamic values seen in the model-based UI.
 tree = ET.parse(ts_path)
@@ -82,37 +85,28 @@ plural = translations.get("Lesson %1 ends in %n minute(s).")
 assert plural == ["Unterricht %1 endet in %n Minute.",
                   "Unterricht %1 endet in %n Minuten."], plural
 
-# QUPIL_AUTO_LESSON_PREFIX_REGRESSION_V1
-# This is a static regression guard, not a database/UI runtime test.
-auto_name_matches = list(re.finditer(
-    r"void AppController::updateLessonAutoName\(int lessonId\)\n\{.*?\n\}\n",
-    app, re.S))
-assert len(auto_name_matches) == 1, "updateLessonAutoName() must exist exactly once"
-auto_name_body = auto_name_matches[0].group(0)
-assert re.search(
-    r'if\s*\(l\.isEmpty\(\)\s*\|\|\s*!l\.value\(QStringLiteral\("autoName"\)\)'
-    r'\.toBool\(\)\)\s*return\s*;', auto_name_body), \
-    "Empty lessons and manually named lessons must stay protected"
-app_contexts = [c for c in root.findall("context")
-                if c.findtext("name") == "AppController"]
-assert len(app_contexts) == 1, "AppController translation context must be unique"
-for kind, source, german in ((1, "IL-", "EU-"), (2, "GL-", "GU-"),
-                             (3, "EnsL-", "EnsU-")):
-    assert re.search(
-        rf'case\s+{kind}\s*:\s*name\s*=\s*tr\("{re.escape(source)}"\)\s*;\s*break\s*;',
-        auto_name_body), f"Lesson type {kind} must use tr({source!r})"
-    matches = [m for m in app_contexts[0].findall("message")
-               if m.findtext("source") == source]
-    assert len(matches) == 1, f"Expected exactly one AppController :: {source}"
-    message = matches[0]
-    translation = message.find("translation")
-    assert not message.findtext("comment") and message.get("numerus") != "yes"
-    assert translation is not None and translation.get("type") not in {
-        "unfinished", "obsolete", "vanished"}, f"Inactive prefix: {source}"
-    assert "".join(translation.itertext()) == german, f"Wrong German prefix: {source}"
-assert re.search(r'default\s*:\s*name\s*=\s*QStringLiteral\("L-"\)\s*;\s*break\s*;',
-                 auto_name_body), "Fallback L- must remain unchanged"
-print("PASS: static guards for translated lesson prefixes and manual-name protection")
-# END QUPIL_AUTO_LESSON_PREFIX_REGRESSION_V1
+lesson_name_translations = {}
+for context in root.findall("context"):
+    if context.findtext("name") != "LessonName":
+        continue
+    for message in context.findall("message"):
+        source = message.findtext("source") or ""
+        trans = message.find("translation")
+        if trans is not None:
+            lesson_name_translations[source] = "".join(trans.itertext()).strip()
+assert lesson_name_translations == {"IL-": "EU-", "GL-": "GU-", "EnsL-": "EnsU-"}, lesson_name_translations
 
-print("PASS: translator initializes before AppController; dynamic model retranslation is wired and catalog values are correct")
+# Automatic lesson names are derived at runtime. Localized display strings must
+# never be written back to the active lesson row. Historical automatic names
+# are structured snapshots; only manual/legacy historical names stay literal.
+assert "updateLessonAutoName" not in app
+assert 'QCoreApplication::translate("LessonName", "IL-")' in app
+assert 'QCoreApplication::translate("LessonName", "GL-")' in app
+assert 'QCoreApplication::translate("LessonName", "EnsL-")' in app
+assert 'default: name = QStringLiteral("L-"); break;' in app
+assert 'const QVariant storedName = autoName' in app and '? QVariant{}' in app
+assert 'autoName ? QVariant{} : membership.value(QStringLiteral("lessonName"))' in app
+assert 'UPDATE lesson SET lessonname=NULL WHERE COALESCE(autolessonname,1)=1' in (ROOT / "src/app/databasemanager.cpp").read_text(encoding="utf-8")
+assert 'UPDATE lastlessonname SET lessonname=NULL WHERE namekind=2' in (ROOT / "src/app/databasemanager.cpp").read_text(encoding="utf-8")
+
+print("PASS: runtime lesson-name localization is language-independent in storage and translated through the stable LessonName context")

@@ -822,18 +822,6 @@
             <source>Printing is available on the desktop build.</source>
             <translation>Drucken ist in der Desktop-Version verfügbar.</translation>
         </message>
-        <message>
-            <source>IL-</source>
-            <translation>EU-</translation>
-        </message>
-        <message>
-            <source>GL-</source>
-            <translation>GU-</translation>
-        </message>
-        <message>
-            <source>EnsL-</source>
-            <translation>EnsU-</translation>
-        </message>
     </context>
     <context>
         <name>ArchivePage</name>
@@ -2807,6 +2795,21 @@
             <location line="+6" />
             <source>Restoring replaces the current data. Qupil creates a local safety copy before the replacement. Continue?</source>
             <translation>Beim Zurückspielen werden die aktuellen Daten ersetzt. Qupil erstellt vorher eine lokale Sicherheitskopie. Fortfahren?</translation>
+        </message>
+    </context>
+    <context>
+        <name>LessonName</name>
+        <message>
+            <source>IL-</source>
+            <translation>EU-</translation>
+        </message>
+        <message>
+            <source>GL-</source>
+            <translation>GU-</translation>
+        </message>
+        <message>
+            <source>EnsL-</source>
+            <translation>EnsU-</translation>
         </message>
     </context>
 </TS>

@@ -74,7 +74,8 @@ for statement in creates:
 
 # Mirror the idempotent post-create seed/update steps that are plain SQL.
 for statement in qstring_literals(DB_CPP[schema_end:]):
-    if statement.startswith(("UPDATE activity ", "INSERT OR IGNORE INTO ", "REPLACE INTO dbinfos ")):
+    if statement.startswith(("UPDATE activity ", "UPDATE lesson ", "UPDATE lastlessonname ",
+                             "INSERT OR IGNORE INTO ", "REPLACE INTO dbinfos ")):
         cur.execute(statement)
 
 expected = {
@@ -95,6 +96,21 @@ for table, columns in expected.items():
 
 revision = cur.execute("SELECT data_structure_rev FROM dbinfos WHERE id=0").fetchone()
 assert revision == (4,), f"expected schema revision 4, got {revision}"
+assert "UPDATE lesson SET lessonname=NULL WHERE COALESCE(autolessonname,1)=1" in DB_CPP
+assert "UPDATE lastlessonname SET lessonname=NULL WHERE namekind=2" in DB_CPP
+
+# Revision 4 reserves lesson.lessonname for manual names. Automatic active names
+# and structured automatic history snapshots must lose any stale localized literal.
+cur.execute("INSERT INTO lesson (lessonid,autolessonname,lessonname) VALUES (101,1,'IL-25-Lin-OleBor')")
+cur.execute("INSERT INTO lesson (lessonid,autolessonname,lessonname) VALUES (102,0,'My quartet')")
+cur.execute("INSERT INTO lastlessonname (llnid,lessonname,namekind) VALUES (201,'EU-25-Lin-OleBor',2)")
+cur.execute("INSERT INTO lastlessonname (llnid,lessonname,namekind) VALUES (202,'Legacy lesson',0)")
+cur.execute("UPDATE lesson SET lessonname=NULL WHERE COALESCE(autolessonname,1)=1")
+cur.execute("UPDATE lastlessonname SET lessonname=NULL WHERE namekind=2")
+assert cur.execute("SELECT lessonname FROM lesson WHERE lessonid=101").fetchone() == (None,)
+assert cur.execute("SELECT lessonname FROM lesson WHERE lessonid=102").fetchone() == ("My quartet",)
+assert cur.execute("SELECT lessonname FROM lastlessonname WHERE llnid=201").fetchone() == (None,)
+assert cur.execute("SELECT lessonname FROM lastlessonname WHERE llnid=202").fetchone() == ("Legacy lesson",)
 
 queries = []
 for statement in qstring_literals(APP_CPP):
