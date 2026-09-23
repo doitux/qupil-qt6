@@ -21,7 +21,16 @@ assert "Qt6::Quick" in cmake and "Qt6::QuickControls2" in cmake
 assert "Qt6::Sql" in cmake and "Qt6::Multimedia" in cmake
 assert "Qt6::QSQLiteDriverPlugin" in cmake, "QSQLITE plugin must be explicitly packaged"
 assert "INCLUDE_BY_TYPE sqldrivers" in cmake
-assert "Qt6::Widgets" not in cmake
+# QUPIL_SOURCE_SANITY_DESKTOP_WIDGETS_V1
+# Qt Widgets is intentional for native desktop printing on Windows/macOS.
+# The CMake block must stay outside Android/iOS builds.
+widgets_marker = cmake.index("QUPIL_NATIVE_PRINT_DIALOG_DESKTOP_V3")
+desktop_guard = cmake.rfind("if(NOT ANDROID AND NOT IOS)", 0, widgets_marker)
+winmac_guard = cmake.index("if(WIN32 OR APPLE)", widgets_marker)
+widgets_link = cmake.index("target_link_libraries(qupil PRIVATE Qt6::Widgets)", winmac_guard)
+assert desktop_guard >= 0
+assert desktop_guard < widgets_marker < winmac_guard < widgets_link
+assert "QUPIL_NATIVE_WIDGET_PRINTING=1" in cmake[winmac_guard:widgets_link + 500]
 assert "Qt6::PrintSupport" in cmake, "desktop printing must use Qt PrintSupport without Qt Widgets"
 assert "Qt6::PrintSupport" in cmake, "desktop printing must use Qt PrintSupport without Qt Widgets"
 
