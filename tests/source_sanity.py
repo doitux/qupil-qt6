@@ -71,6 +71,17 @@ for line in cmake.splitlines():
 for rel in resource_paths:
     assert (ROOT / rel).exists(), f"QML resource missing from source tree: {rel}"
 
+# Document preview geometry must remain one-way: the viewport controls the
+# paper width, never the content width feeding back through availableWidth.
+preview_qml = (ROOT / "qml/components/DocumentPreviewDialog.qml").read_text(encoding="utf-8")
+assert "contentWidth: width" in preview_qml
+assert "ScrollBar.horizontal.policy: ScrollBar.AlwaysOff" in preview_qml
+assert "width: previewScroll.width" in preview_qml
+assert "width: Math.max(300, previewScroll.width - 48)" in preview_qml
+assert "contentWidth: Math.max(availableWidth, paper.width + 32)" not in preview_qml
+assert "width: previewScroll.contentWidth" not in preview_qml
+assert "width: Math.max(300, previewScroll.availableWidth - 48)" not in preview_qml
+
 # Unsupported in Qt 6.5 TextField; SearchField only arrived later.
 for path in qml_files:
     text = path.read_text(encoding="utf-8")

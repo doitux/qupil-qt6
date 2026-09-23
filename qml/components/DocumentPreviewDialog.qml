@@ -39,11 +39,12 @@ Dialog {
             Layout.fillHeight: true
             clip: true
 
-            contentWidth: Math.max(availableWidth, paper.width + 32)
+            contentWidth: width
             contentHeight: paper.height + 32
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
             Item {
-                width: previewScroll.contentWidth
+                width: previewScroll.width
                 height: previewScroll.contentHeight
 
                 Rectangle {
@@ -51,7 +52,7 @@ Dialog {
                     anchors.horizontalCenter: parent.horizontalCenter
                     y: 16
 
-                    width: Math.max(300, previewScroll.availableWidth - 48)
+                    width: Math.max(300, previewScroll.width - 48)
                     height: Math.max(width / root.pageAspect,
                                      previewText.implicitHeight + 48)
 
