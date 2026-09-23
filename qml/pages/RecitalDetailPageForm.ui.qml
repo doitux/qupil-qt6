@@ -18,6 +18,9 @@ Item {
     property var saveAction: null
     property var documentAction: null
     property var removePieceAction: null
+    property var moveProgramPieceAction: null
+    property var saveProgramOrderAction: null
+    property bool programOrderDirty: false
     property var addCandidateAction: null
     property var addExternalAction: null
     property var openFinishAction: null
@@ -82,18 +85,79 @@ Item {
                     Layout.fillWidth: true
                     Layout.leftMargin: 12
                     Layout.rightMargin: 12
-                    Button { text: qsTr("Document ..."); action: root.documentAction }
-                    Label { visible: root.eventPieces.length === 0; text: qsTr("No pieces in the program yet."); opacity: 0.65 }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Button { text: qsTr("Document ..."); action: root.documentAction }
+                        Button {
+                            text: qsTr("Save") + " ↕"
+                            action: root.saveProgramOrderAction
+                            enabled: root.programOrderDirty
+                        }
+                        Item { Layout.fillWidth: true }
+                    }
+
+                    Label {
+                        visible: root.eventPieces.length === 0
+                        text: qsTr("No pieces in the program yet.")
+                        opacity: 0.65
+                    }
+
                     Repeater {
                         model: root.eventPieces
                         delegate: RowLayout {
                             required property var modelData
+                            required property int index
                             Layout.fillWidth: true
+                            spacing: 8
+
+                            Label {
+                                text: (index + 1) + "."
+                                opacity: 0.65
+                                Layout.alignment: Qt.AlignTop
+                                Layout.topMargin: 3
+                            }
+
                             ColumnLayout {
                                 Layout.fillWidth: true
-                                Label { text: modelData.composer + " — " + modelData.title; font.bold: true; Layout.fillWidth: true; elide: Text.ElideRight }
-                                Label { text: modelData.genre + (modelData.duration ? " · " + modelData.duration + " min" : "") + (modelData.external ? " · " + qsTr("external") : ""); opacity: 0.65 }
+                                spacing: 2
+                                Label {
+                                    text: modelData.composer + " — " + modelData.title
+                                    font.bold: true
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
+                                }
+                                Label {
+                                    text: qsTr("Musician") + ": " + ((modelData.musicians || "").length > 0 ? modelData.musicians : "—")
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                }
+                                Label {
+                                    text: modelData.genre + (modelData.duration ? " · " + modelData.duration + " min" : "") + (modelData.external ? " · " + qsTr("external") : "")
+                                    opacity: 0.65
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
+                                }
                             }
+
+                            ColumnLayout {
+                                spacing: 0
+                                ToolButton {
+                                    property int parId: modelData.parId
+                                    property int direction: -1
+                                    text: "↑"
+                                    enabled: index > 0
+                                    action: root.moveProgramPieceAction
+                                }
+                                ToolButton {
+                                    property int parId: modelData.parId
+                                    property int direction: 1
+                                    text: "↓"
+                                    enabled: index < root.eventPieces.length - 1
+                                    action: root.moveProgramPieceAction
+                                }
+                            }
+
                             ToolButton {
                                 property int parId: modelData.parId
                                 text: "×"

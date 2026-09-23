@@ -15,6 +15,10 @@ RowLayout {
     property var createDocument: function() { return "" }
     property string pendingHtml: ""
     property var printerNames: []
+    property url pdfFolder: App.suggestedPdfUrl("")
+    property string pendingPdfHtml: ""
+    property string pendingPdfTitle: ""
+    property bool pendingPdfLandscape: false
     readonly property bool mobilePlatform: Qt.platform.os === "android" || Qt.platform.os === "ios"
 
     function buildDocument() {
@@ -31,13 +35,24 @@ RowLayout {
             const mobileFileName = suggestedFileName.length > 0 ? suggestedFileName : ("Qupil_" + documentTitle)
             App.shareDocumentPdf(html, mobileFileName, documentTitle, landscape)
         } else {
-            pendingHtml = html
-            if (suggestedFileName.length > 0) {
-                saveDialog.currentFile = App.suggestedPdfUrl(suggestedFileName)
-            } else {
-                saveDialog.currentFile = ""
-                saveDialog.currentFolder = App.suggestedPdfUrl("")
-            }
+            // QUPIL_NATIVE_SAVE_DIALOG_V1
+            if (saveDialog.visible)
+                return
+
+            // Keep an immutable snapshot until the asynchronous dialog returns.
+            pendingPdfHtml = html
+            pendingPdfTitle = documentTitle
+            pendingPdfLandscape = landscape
+            const baseName = suggestedFileName.length > 0
+                             ? suggestedFileName
+                             : ("Qupil_" + documentTitle)
+
+            if (!pdfFolder.toString().length)
+                pdfFolder = App.suggestedPdfUrl("")
+            saveDialog.currentFolder = pdfFolder
+            // SaveFile accepts a filename that does not exist yet.
+            // Qt's portal helper forwards its basename as current_name.
+            saveDialog.selectedFile = App.pdfUrlInFolder(pdfFolder, baseName)
             saveDialog.open()
         }
     }
@@ -71,9 +86,24 @@ RowLayout {
         id: saveDialog
         title: qsTr("Export File")
         fileMode: FileDialog.SaveFile
+        defaultSuffix: "pdf"
         nameFilters: [qsTr("PDF File (*.pdf)")]
-        onAccepted: App.exportDocumentPdf(root.pendingHtml, selectedFile,
-                                          root.documentTitle, root.landscape)
+        // Standardoptionen beibehalten:
+        // Der native Plattformdialog bleibt erlaubt und die
+        // Ueberschreibbestaetigung bleibt aktiv.
+
+        onAccepted: {
+            const destination = selectedFile
+            if (!destination.toString().length)
+                return
+
+            // Only an accepted dialog may trigger an actual PDF write.
+            if (App.exportDocumentPdf(root.pendingPdfHtml, destination,
+                                      root.pendingPdfTitle, root.pendingPdfLandscape))
+                root.pdfFolder = currentFolder
+            root.pendingPdfHtml = ""
+        }
+        onRejected: root.pendingPdfHtml = ""
     }
 
     Dialog {

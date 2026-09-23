@@ -9,6 +9,7 @@ Page {
     property int recitalState: 0
     property var eventPieces: []
     property var candidates: []
+    property bool programOrderDirty: false
     signal done()
 
     function reloadPieces() {
@@ -19,6 +20,57 @@ Page {
         }
         eventPieces = App.recitalPieces(recitalId)
         candidates = App.readyPieces()
+        programOrderDirty = false
+    }
+
+    function moveProgramPiece(parId, direction) {
+        let from = -1
+        for (let i = 0; i < eventPieces.length; ++i) {
+            if (eventPieces[i].parId === parId) {
+                from = i
+                break
+            }
+        }
+        const to = from + direction
+        if (from < 0 || to < 0 || to >= eventPieces.length)
+            return
+
+        const reordered = eventPieces.slice()
+        const moved = reordered.splice(from, 1)[0]
+        reordered.splice(to, 0, moved)
+        eventPieces = reordered
+        programOrderDirty = true
+    }
+
+    function saveProgramOrder() {
+        if (!programOrderDirty || recitalId < 0)
+            return true
+
+        const parIds = []
+        for (let i = 0; i < eventPieces.length; ++i)
+            parIds.push(eventPieces[i].parId)
+
+        if (!App.saveRecitalPieceOrder(recitalId, parIds))
+            return false
+
+        reloadPieces()
+        return true
+    }
+
+    function programPdfBaseName() {
+        const parts = []
+        const description = form.eventDescription.text.trim()
+        const location = form.eventLocation.text.trim()
+        const date = form.eventDate.text.trim()
+
+        if (description.length > 0)
+            parts.push(description)
+        if (location.length > 0)
+            parts.push(location)
+        if (date.length > 0)
+            parts.push(date)
+
+        return parts.length > 0 ? parts.join("_") : "Qupil"
     }
 
     function load() {
@@ -56,6 +108,8 @@ Page {
         })
         if (id >= 0) {
             recitalId = id
+            if (!saveProgramOrder())
+                return
             load()
             saved.open()
         }
@@ -65,15 +119,33 @@ Page {
     Action { id: saveAction; onTriggered: root.save() }
     Action {
         id: documentAction
-        onTriggered: recitalPreview.showDocument(
-            App.recitalDocumentHtml(root.recitalId),
-            qsTr("Program overview for events"),
-            form.eventDescription.text + "_" + form.eventLocation.text + "_" + form.eventDate.text,
-            true)
+        onTriggered: {
+            if (!root.saveProgramOrder())
+                return
+            recitalPreview.showDocument(
+                App.recitalDocumentHtml(root.recitalId),
+                qsTr("Program overview for events"),
+                root.programPdfBaseName(),
+                true)
+        }
+    }
+    Action {
+        id: moveProgramPieceAction
+        onTriggered: source => root.moveProgramPiece(source.parId, source.direction)
+    }
+    Action {
+        id: saveProgramOrderAction
+        enabled: root.programOrderDirty
+        onTriggered: {
+            if (root.saveProgramOrder())
+                saved.open()
+        }
     }
     Action {
         id: removePieceAction
         onTriggered: source => {
+            if (!root.saveProgramOrder())
+                return
             if (App.removePieceFromRecital(source.parId))
                 root.reloadPieces()
         }
@@ -81,6 +153,8 @@ Page {
     Action {
         id: addCandidateAction
         onTriggered: source => {
+            if (!root.saveProgramOrder())
+                return
             if (App.addPieceToRecital(root.recitalId, source.pieceId))
                 root.reloadPieces()
         }
@@ -88,6 +162,8 @@ Page {
     Action {
         id: addExternalAction
         onTriggered: {
+            if (!root.saveProgramOrder())
+                return
             if (App.addExternalPieceToRecital(root.recitalId,
                                               form.externalComposer.text,
                                               form.externalTitle.text,
@@ -113,6 +189,9 @@ Page {
         saveAction: saveAction
         documentAction: documentAction
         removePieceAction: removePieceAction
+        moveProgramPieceAction: moveProgramPieceAction
+        saveProgramOrderAction: saveProgramOrderAction
+        programOrderDirty: root.programOrderDirty
         addCandidateAction: addCandidateAction
         addExternalAction: addExternalAction
         openFinishAction: openFinishAction

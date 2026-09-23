@@ -2,6 +2,11 @@
 
 #include <QCoreApplication>
 #include <QGuiApplication>
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+#include <QDir>
+#include <QFileInfo>
+#include <QLibraryInfo>
+#endif
 #include <QIcon>
 #include <QDebug>
 #include <QQmlApplicationEngine>
@@ -14,6 +19,25 @@
 
 int main(int argc, char *argv[])
 {
+    // QUPIL_NATIVE_SAVE_DIALOG_V1
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    // An SDK-built QGuiApplication need not load KDE's in-process Qt plugins.
+    // The matching Qt portal plugin talks to the system's desktop portal over
+    // D-Bus; on Plasma the KDE backend draws the real file chooser.
+    // This preference affects Qupil only, not the desktop or other programs.
+    // Set QUPIL_FILE_DIALOG_THEME=system to keep an explicitly chosen theme.
+    if (qEnvironmentVariable("QUPIL_FILE_DIALOG_THEME") != QStringLiteral("system")) {
+        const QString portalPlugin = QDir(QLibraryInfo::path(QLibraryInfo::PluginsPath))
+            .filePath(QStringLiteral("platformthemes/libqxdgdesktopportal.so"));
+        if (QFileInfo::exists(portalPlugin)) {
+            qputenv("QT_QPA_PLATFORMTHEME", QByteArrayLiteral("xdgdesktopportal"));
+            qInfo() << "QUPIL_FILE_DIALOGS: requesting xdgdesktopportal";
+        } else {
+            qWarning() << "QUPIL_FILE_DIALOGS: Qt portal plugin is missing;"
+                          " using the default platform dialog integration.";
+        }
+    }
+#endif
     QGuiApplication app(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Qupil"));
     QCoreApplication::setOrganizationDomain(QStringLiteral("qupil.org"));

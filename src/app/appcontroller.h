@@ -64,6 +64,8 @@ public:
     Q_INVOKABLE QString recitalDocumentHtml(int recitalId) const;
     Q_INVOKABLE QString rentalInstrumentDocumentHtml() const;
     Q_INVOKABLE QUrl suggestedPdfUrl(const QString &baseName) const;
+    Q_INVOKABLE QString suggestedPdfFileName(const QString &baseName) const;
+    Q_INVOKABLE QUrl pdfUrlInFolder(const QUrl &folder, const QString &baseName) const;
     Q_INVOKABLE bool exportDocumentPdf(const QString &html, const QUrl &destination,
                                         const QString &title, bool landscape = false);
     Q_INVOKABLE bool shareDocumentPdf(const QString &html, const QString &baseName,
@@ -125,6 +127,7 @@ public:
     Q_INVOKABLE bool addExternalPieceToRecital(int recitalId, const QString &composer, const QString &title,
                                                const QString &genre, int duration, const QString &musician);
     Q_INVOKABLE bool removePieceFromRecital(int parId);
+    Q_INVOKABLE bool saveRecitalPieceOrder(int recitalId, const QVariantList &parIds);
     Q_INVOKABLE bool finishRecital(int recitalId, bool createActivities, bool finishPieces);
 
     Q_INVOKABLE QStringList settingList(const QString &key) const;
