@@ -49,18 +49,26 @@ Item {
                             rowSpacing: 10
                             Layout.fillWidth: true
                             Repeater {
-                                model: [
-                                    [qsTr("Pupils"), root.stats.todayPupils || 0],
-                                    [qsTr("Lessons"), root.stats.todayLessons || 0]
-                                ]
+                                model: [[qsTr("Pupils"), root.stats.todayPupils
+                                         || 0], [qsTr("Lessons"), root.stats.todayLessons
+                                                 || 0]]
                                 delegate: Pane {
                                     required property var modelData
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 92
                                     ColumnLayout {
                                         anchors.fill: parent
-                                        Label { text: modelData[1]; font.pixelSize: 28; font.bold: true }
-                                        Label { text: modelData[0]; opacity: 0.7; Layout.fillWidth: true; elide: Text.ElideRight }
+                                        Label {
+                                            text: modelData[1]
+                                            font.pixelSize: 28
+                                            font.bold: true
+                                        }
+                                        Label {
+                                            text: modelData[0]
+                                            opacity: 0.7
+                                            Layout.fillWidth: true
+                                            elide: Text.ElideRight
+                                        }
                                     }
                                 }
                             }
@@ -87,22 +95,29 @@ Item {
                             rowSpacing: 10
                             Layout.fillWidth: true
                             Repeater {
-                                model: [
-                                    [qsTr("Pupils"), root.stats.pupils || 0],
-                                    [qsTr("Lessons"), root.stats.lessons || 0],
-                                    [qsTr("Reminders"), root.stats.reminders || 0],
-                                    [qsTr("Loaned scores"), root.stats.loanedMusic || 0],
-                                    [qsTr("Events"), root.stats.recitals || 0]
-                                ]
+                                model: [[qsTr("Pupils"), root.stats.pupils
+                                         || 0], [qsTr("Lessons"), root.stats.lessons
+                                                 || 0], [qsTr("Reminders"), root.stats.reminders
+                                                         || 0], [qsTr("Loaned scores"), root.stats.loanedMusic || 0], [qsTr("Events"), root.stats.recitals || 0]]
                                 delegate: ItemDelegate {
+                                    background: null
                                     required property int index
                                     required property var modelData
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 92
                                     action: index === 0 ? root.openPupilsAction : null
                                     contentItem: ColumnLayout {
-                                        Label { text: modelData[1]; font.pixelSize: 28; font.bold: true }
-                                        Label { text: modelData[0]; opacity: 0.7; Layout.fillWidth: true; elide: Text.ElideRight }
+                                        Label {
+                                            text: modelData[1]
+                                            font.pixelSize: 28
+                                            font.bold: true
+                                        }
+                                        Label {
+                                            text: modelData[0]
+                                            opacity: 0.7
+                                            Layout.fillWidth: true
+                                            elide: Text.ElideRight
+                                        }
                                     }
                                 }
                             }
@@ -137,15 +152,27 @@ Item {
                     Layout.rightMargin: 16
                     contentItem: Column {
                         spacing: 3
-                        Label { text: (modelData.start || "") + "–" + (modelData.stop || "") + "  " + (modelData.name || ""); font.bold: true }
                         Label {
-                            text: (modelData.pupils || "") + ((modelData.pupils || "") && (modelData.location || "") ? " · " : "") + (modelData.location || "")
+                            text: (modelData.start
+                                   || "") + "–" + (modelData.stop
+                                                   || "") + "  " + (modelData.name
+                                                                    || "")
+                            font.bold: true
+                        }
+                        Label {
+                            text: (modelData.pupils
+                                   || "") + ((modelData.pupils || "")
+                                             && (modelData.location
+                                                 || "") ? " · " : "") + (modelData.location
+                                                                         || "")
                             opacity: 0.7
                         }
                     }
                 }
             }
-            Item { Layout.preferredHeight: 16 }
+            Item {
+                Layout.preferredHeight: 16
+            }
         }
     }
 }
