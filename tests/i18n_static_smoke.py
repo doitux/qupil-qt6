@@ -13,7 +13,15 @@ ts_path = ROOT / "i18n/qupil_de.ts"
 
 # Translator must be installed before AppController populates translated roles.
 lang_pos = main.find("LanguageController languageController")
-app_pos = main.find("AppController controller")
+# QUPIL_I18N_STATIC_HEAP_CONTROLLER_V1
+# AppController used to be a stack object. It is now parented to the
+# application so it outlives the QML engine during shutdown. Accept both
+# shapes here; the ordering assertion below remains the actual invariant.
+app_positions = [
+    main.find("AppController controller"),
+    main.find("new AppController(&app)"),
+]
+app_pos = min((pos for pos in app_positions if pos >= 0), default=-1)
 assert lang_pos >= 0 and app_pos >= 0 and lang_pos < app_pos, \
     "LanguageController must be constructed before AppController"
 assert "&LanguageController::effectiveLanguageChanged" in main
