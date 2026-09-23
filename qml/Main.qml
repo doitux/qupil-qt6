@@ -56,7 +56,6 @@ id: root
                 messages.push(warnings[i].description)
             lessonEndMessage = messages.join("\n")
             Metronome.playLessonEndSound()
-            lessonEndPopup.open()
         }
     }
 
@@ -337,19 +336,6 @@ id: root
                     runtimeReminder.close()
                 }
             }
-        }
-    }
-
-    Popup {
-        id: lessonEndPopup
-        anchors.centerIn: parent
-        modal: false
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        padding: 18
-        ColumnLayout {
-            Label { text: qsTr("Lesson ending soon"); font.bold: true; font.pixelSize: 18 }
-            Label { text: root.lessonEndMessage; wrapMode: Text.WordWrap; Layout.maximumWidth: 440 }
-            Button { text: qsTr("OK"); onClicked: lessonEndPopup.close() }
         }
     }
 
