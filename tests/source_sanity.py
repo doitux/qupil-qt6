@@ -152,6 +152,8 @@ assert "setExactAndAllowWhileIdle" in android_scheduler
 assert "setAndAllowWhileIdle" in android_scheduler
 assert "canScheduleExactAlarms" in android_scheduler
 assert "MediaPlayer" in android_receiver and "PREF_LESSON_VOLUME" in android_receiver
+assert ".setSound(null)" not in android_receiver
+assert "createNotificationChannel(context)" in android_receiver
 assert "isAppForeground" in android_receiver and "inAppReminder" in android_receiver
 assert "UNUserNotificationCenter" in ios_scheduler
 assert "UNCalendarNotificationTrigger" in ios_scheduler

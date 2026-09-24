@@ -73,8 +73,7 @@ public final class QupilReminderReceiver extends BroadcastReceiver {
                 .setContentTitle(spec.optString("title", "Qupil"))
                 .setContentText(spec.optString("body", ""))
                 .setAutoCancel(true)
-                .setOnlyAlertOnce(true)
-                .setSound(null);
+                .setOnlyAlertOnce(true);
         if (contentIntent != null)
             builder.setContentIntent(contentIntent);
         manager.notify(identifier.hashCode(), builder.build());
