@@ -23,12 +23,15 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - uses: android-actions/setup-android@v3
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+          log-accepted-android-sdk-licenses: false
 
       - name: Install Android SDK/NDK
         shell: bash
         run: |
-          yes | sdkmanager --licenses >/dev/null || true
           sdkmanager \
             'platform-tools' \
             'platforms;android-35' \
