@@ -127,6 +127,9 @@ manifest = (ROOT / "android/AndroidManifest.xml").read_text(encoding="utf-8")
 android_scheduler = (ROOT / "android/src/org/qupil/app/QupilReminderScheduler.java").read_text(encoding="utf-8")
 android_receiver = (ROOT / "android/src/org/qupil/app/QupilReminderReceiver.java").read_text(encoding="utf-8")
 ios_scheduler = (ROOT / "src/app/native_reminders_ios.mm").read_text(encoding="utf-8")
+assert ios_scheduler.index("@interface QupilNotificationDelegate") < ios_scheduler.index("namespace {")
+assert ios_scheduler.index("@implementation QupilNotificationDelegate") < ios_scheduler.index("namespace {")
+assert "UNNotificationPresentationOptionAlert" not in ios_scheduler
 assert 'nativeMobileReminders: Qt.platform.os === "android" || Qt.platform.os === "ios"' in main_qml
 assert "running: !root.nativeMobileReminders || Qt.application.state === Qt.ApplicationActive" in main_qml
 assert "enqueueNotifications(App.lessonReminders(includeCurrentLesson))" in main_qml

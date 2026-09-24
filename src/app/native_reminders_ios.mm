@@ -8,6 +8,37 @@
 #include <QFileInfo>
 #include <QVariantMap>
 
+@interface QupilNotificationDelegate : NSObject<UNUserNotificationCenterDelegate>
+@end
+
+@implementation QupilNotificationDelegate
+- (void)userNotificationCenter:(UNUserNotificationCenter *)center
+       willPresentNotification:(UNNotification *)notification
+         withCompletionHandler:(void (^)(UNNotificationPresentationOptions options))completionHandler
+{
+    (void)center;
+    const BOOL lessonEnd = [notification.request.identifier hasPrefix:@"qupil-lesson-end-"];
+    if (lessonEnd) {
+        completionHandler(UNNotificationPresentationOptionSound);
+        return;
+    }
+    if (UIApplication.sharedApplication.applicationState == UIApplicationStateActive) {
+        // The existing QML reminder dialog remains the foreground UI.
+        completionHandler(0);
+        return;
+    }
+    if (@available(iOS 14.0, *)) {
+        completionHandler(UNNotificationPresentationOptionBanner |
+                          UNNotificationPresentationOptionList |
+                          UNNotificationPresentationOptionSound);
+    } else {
+        // Qupil's supported iOS builds are newer; keep a warning-free fallback
+        // for older SDK targets instead of using the deprecated Alert option.
+        completionHandler(UNNotificationPresentationOptionSound);
+    }
+}
+@end
+
 namespace {
 
 NSString *nsString(const QString &value)
@@ -55,35 +86,6 @@ NSString *prepareCustomSound(const QString &sourcePath, NSString *profilePrefix,
         return fallbackName;
     return fileName;
 }
-
-@interface QupilNotificationDelegate : NSObject<UNUserNotificationCenterDelegate>
-@end
-
-@implementation QupilNotificationDelegate
-- (void)userNotificationCenter:(UNUserNotificationCenter *)center
-       willPresentNotification:(UNNotification *)notification
-         withCompletionHandler:(void (^)(UNNotificationPresentationOptions options))completionHandler
-{
-    (void)center;
-    const BOOL lessonEnd = [notification.request.identifier hasPrefix:@"qupil-lesson-end-"];
-    if (lessonEnd) {
-        completionHandler(UNNotificationPresentationOptionSound);
-        return;
-    }
-    if (UIApplication.sharedApplication.applicationState == UIApplicationStateActive) {
-        // The existing QML reminder dialog remains the foreground UI.
-        completionHandler(0);
-        return;
-    }
-    if (@available(iOS 14.0, *))
-        completionHandler(UNNotificationPresentationOptionBanner |
-                          UNNotificationPresentationOptionList |
-                          UNNotificationPresentationOptionSound);
-    else
-        completionHandler(UNNotificationPresentationOptionAlert |
-                          UNNotificationPresentationOptionSound);
-}
-@end
 
 QupilNotificationDelegate *notificationDelegate()
 {
