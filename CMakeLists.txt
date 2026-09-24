@@ -36,17 +36,33 @@ qt_add_executable(qupil
     src/app/metronomecontroller.cpp
     src/app/metronomecontroller.h
     src/app/native_share.h
+    src/app/native_reminders.h
 )
 
 
-# Qupil v28 PDF sharing
+# Native mobile integration: PDF sharing and background reminder scheduling.
 if(IOS)
     enable_language(OBJCXX)
-    target_sources(qupil PRIVATE src/app/native_share_ios.mm)
-    set_source_files_properties(src/app/native_share_ios.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
-    target_link_libraries(qupil PRIVATE "-framework UIKit")
+    target_sources(qupil PRIVATE
+        src/app/native_share_ios.mm
+        src/app/native_reminders_ios.mm
+    )
+    set_source_files_properties(
+        src/app/native_share_ios.mm
+        src/app/native_reminders_ios.mm
+        PROPERTIES COMPILE_FLAGS "-fobjc-arc"
+    )
+    target_link_libraries(qupil PRIVATE "-framework UIKit" "-framework UserNotifications")
+elseif(ANDROID)
+    target_sources(qupil PRIVATE
+        src/app/native_share.cpp
+        src/app/native_reminders_android.cpp
+    )
 else()
-    target_sources(qupil PRIVATE src/app/native_share.cpp)
+    target_sources(qupil PRIVATE
+        src/app/native_share.cpp
+        src/app/native_reminders.cpp
+    )
 endif()
 
 if(NOT ANDROID AND NOT IOS)
@@ -261,9 +277,17 @@ endif()
 
 if(IOS)
     set(QUPIL_IOS_ASSET_CATALOG "${CMAKE_CURRENT_SOURCE_DIR}/ios/Assets.xcassets")
-    target_sources(qupil PRIVATE "${QUPIL_IOS_ASSET_CATALOG}")
+    set(QUPIL_IOS_NOTIFICATION_SOUNDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/data/sounds/lesson-end.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/data/sounds/reminder.wav"
+    )
+    target_sources(qupil PRIVATE
+        "${QUPIL_IOS_ASSET_CATALOG}"
+        ${QUPIL_IOS_NOTIFICATION_SOUNDS}
+    )
     set_source_files_properties(
         "${QUPIL_IOS_ASSET_CATALOG}"
+        ${QUPIL_IOS_NOTIFICATION_SOUNDS}
         PROPERTIES MACOSX_PACKAGE_LOCATION Resources
     )
     set_target_properties(qupil PROPERTIES

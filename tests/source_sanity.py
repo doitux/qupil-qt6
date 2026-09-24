@@ -116,4 +116,57 @@ for obsolete in (
     assert not (ROOT / obsolete).exists(), f"obsolete packaging artifact remains: {obsolete}"
 assert "include(CPack)" in cmake and "qt_generate_deploy_qml_app_script" in cmake
 
-print(f"PASS: {len(qml_files)} QML files listed; Qt Widgets absent from QML app; audio/SQLite and legacy third-party replacements use Qt modules only")
+# Mobile reminders must be scheduled by the operating system. QML polling is
+# desktop-only because iOS suspends background apps and Android may throttle
+# their event loop.
+main_qml = (ROOT / "qml/Main.qml").read_text(encoding="utf-8")
+app_cpp = (ROOT / "src/app/appcontroller.cpp").read_text(encoding="utf-8")
+settings_qml = (ROOT / "qml/pages/SettingsPage.qml").read_text(encoding="utf-8")
+settings_form = (ROOT / "qml/pages/SettingsPageForm.ui.qml").read_text(encoding="utf-8")
+manifest = (ROOT / "android/AndroidManifest.xml").read_text(encoding="utf-8")
+android_scheduler = (ROOT / "android/src/org/qupil/app/QupilReminderScheduler.java").read_text(encoding="utf-8")
+android_receiver = (ROOT / "android/src/org/qupil/app/QupilReminderReceiver.java").read_text(encoding="utf-8")
+ios_scheduler = (ROOT / "src/app/native_reminders_ios.mm").read_text(encoding="utf-8")
+assert 'nativeMobileReminders: Qt.platform.os === "android" || Qt.platform.os === "ios"' in main_qml
+assert "running: !root.nativeMobileReminders || Qt.application.state === Qt.ApplicationActive" in main_qml
+assert "enqueueNotifications(App.lessonReminders(includeCurrentLesson))" in main_qml
+assert "if (nativeMobileReminders)" in main_qml
+assert "nativeReminderSchedule() const" in app_cpp
+assert "syncNativeReminders()" in app_cpp
+assert 'QStringLiteral("lessonEndSoundPath")' in app_cpp
+assert 'QStringLiteral("reminderSoundPath")' in app_cpp
+assert 'QStringLiteral("lessonEndSoundVolume")' in app_cpp
+assert 'QStringLiteral("reminderSoundVolume")' in app_cpp
+assert 'App.importReminderSound("lessonEnd"' in settings_qml
+assert 'App.importReminderSound("reminder"' in settings_qml
+assert 'Metronome.previewReminderSound("lessonEnd"' in settings_qml
+assert 'Metronome.previewReminderSound("reminder"' in settings_qml
+assert 'id: lessonEndVolume' in settings_form and 'id: reminderVolume' in settings_form
+for permission in ("POST_NOTIFICATIONS", "SCHEDULE_EXACT_ALARM", "RECEIVE_BOOT_COMPLETED", "WAKE_LOCK"):
+    assert permission in manifest
+assert "QupilReminderReceiver" in manifest and "QupilReminderBootReceiver" in manifest
+assert "setExactAndAllowWhileIdle" in android_scheduler
+assert "setAndAllowWhileIdle" in android_scheduler
+assert "canScheduleExactAlarms" in android_scheduler
+assert "MediaPlayer" in android_receiver and "PREF_LESSON_VOLUME" in android_receiver
+assert "isAppForeground" in android_receiver and "inAppReminder" in android_receiver
+assert "UNUserNotificationCenter" in ios_scheduler
+assert "UNCalendarNotificationTrigger" in ios_scheduler
+assert 'LibraryDirectory' in ios_scheduler and 'soundNamed:' in ios_scheduler
+assert 'UIApplicationStateActive' in ios_scheduler
+assert 'lesson-end.wav' in cmake and 'reminder.wav' in cmake
+metronome_h = (ROOT / "src/app/metronomecontroller.h").read_text(encoding="utf-8")
+assert "QMediaPlayer m_notificationCustom" in metronome_h and "QMediaPlayer m_lessonEndCustom" in metronome_h
+assert "QSoundEffect m_notification" in metronome_h and "QSoundEffect m_lessonEnd" in metronome_h
+for legacy_key, current_key in (
+    ("MsgSoundFilePath", "lessonEndSoundPath"),
+    ("LessonEndMsgSoundVolume", "lessonEndSoundVolume"),
+    ("RemSoundFilePath", "reminderSoundPath"),
+    ("RemSoundVolume", "reminderSoundVolume"),
+):
+    assert legacy_key in app_cpp and current_key in app_cpp
+assert "removeAllPendingNotificationRequests" not in ios_scheduler
+assert (ROOT / "android/res/raw/lesson_end.wav").exists()
+assert (ROOT / "android/res/raw/reminder.wav").exists()
+
+print(f"PASS: {len(qml_files)} QML files listed; desktop polling + native mobile reminder scheduling and configurable sounds are guarded")

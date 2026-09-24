@@ -12,16 +12,28 @@ Item {
     property string databasePath: ""
     property bool importedLegacyDatabase: false
     property int languageIndex: 0
+    property bool androidExactAlarmGranted: true
 
     property var backupAction: null
     property var restoreAction: null
     property var csvImportAction: null
     property var saveAction: null
+    property var chooseLessonEndSoundAction: null
+    property var defaultLessonEndSoundAction: null
+    property var testLessonEndSoundAction: null
+    property var chooseReminderSoundAction: null
+    property var defaultReminderSoundAction: null
+    property var testReminderSoundAction: null
+    property var exactAlarmAction: null
 
     property alias languageCombo: languageCombo
     property alias birthdayReminder: birthdayReminder
     property alias lessonEndReminder: lessonEndReminder
     property alias lessonEndMinutes: lessonEndMinutes
+    property alias lessonEndSoundPath: lessonEndSoundPath
+    property alias lessonEndVolume: lessonEndVolume
+    property alias reminderSoundPath: reminderSoundPath
+    property alias reminderVolume: reminderVolume
     property alias shareLessonContent: shareLessonContent
     property alias locations: locations
     property alias genres: genres
@@ -64,6 +76,57 @@ Item {
                     SpinBox { id: lessonEndMinutes; from: 1; to: 30; editable: true; enabled: lessonEndReminder.checked }
                     Item { Layout.fillWidth: true }
                 }
+
+                Label { text: qsTr("Lesson end sound"); font.bold: true; Layout.topMargin: 4 }
+                TextField { id: lessonEndSoundPath; readOnly: true; Layout.fillWidth: true }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Button { text: qsTr("Choose…"); action: root.chooseLessonEndSoundAction }
+                    Button { text: qsTr("Default"); action: root.defaultLessonEndSoundAction }
+                    Button { text: qsTr("Test"); action: root.testLessonEndSoundAction }
+                    Item { Layout.fillWidth: true }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Label { text: qsTr("Volume") }
+                    Slider { id: lessonEndVolume; from: 0; to: 10; stepSize: 1; Layout.fillWidth: true }
+                    Label { text: Math.round(lessonEndVolume.value).toString(); Layout.preferredWidth: 24; horizontalAlignment: Text.AlignRight }
+                }
+
+                Label { text: qsTr("Sound for reminders"); font.bold: true; Layout.topMargin: 4 }
+                TextField { id: reminderSoundPath; readOnly: true; Layout.fillWidth: true }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Button { text: qsTr("Choose…"); action: root.chooseReminderSoundAction }
+                    Button { text: qsTr("Default"); action: root.defaultReminderSoundAction }
+                    Button { text: qsTr("Test"); action: root.testReminderSoundAction }
+                    Item { Layout.fillWidth: true }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Label { text: qsTr("Volume") }
+                    Slider { id: reminderVolume; from: 0; to: 10; stepSize: 1; Layout.fillWidth: true }
+                    Label { text: Math.round(reminderVolume.value).toString(); Layout.preferredWidth: 24; horizontalAlignment: Text.AlignRight }
+                }
+
+                Label {
+                    visible: Qt.platform.os === "ios"
+                    text: qsTr("On iOS/iPadOS, background notification sounds use the system notification volume. Custom background sounds must be WAV, AIFF or CAF and shorter than 30 seconds.")
+                    wrapMode: Text.WordWrap
+                    opacity: 0.7
+                    Layout.fillWidth: true
+                }
+                RowLayout {
+                    visible: Qt.platform.os === "android" && !root.androidExactAlarmGranted
+                    Layout.fillWidth: true
+                    Label {
+                        text: qsTr("Android needs the 'Alarms & reminders' permission for exact background timing.")
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                    Button { text: qsTr("Allow exact alarms"); action: root.exactAlarmAction }
+                }
+
                 CheckBox {
                     id: shareLessonContent
                     text: qsTr("Share notes and pieces with all active pupils in the selected lesson")

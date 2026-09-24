@@ -78,6 +78,11 @@ int main(int argc, char *argv[])
     // bindings; refreshAll() handles strings materialized inside C++ models.
     QObject::connect(&languageController, &LanguageController::effectiveLanguageChanged,
                      controller, &AppController::refreshAll);
+    QObject::connect(&app, &QGuiApplication::applicationStateChanged, controller,
+                     [controller](Qt::ApplicationState state) {
+        if (state == Qt::ApplicationActive)
+            controller->syncNativeReminders();
+    });
 
     // Build/CI-only diagnostic. It verifies both initial translation timing and
     // a live de -> en -> de model round-trip without affecting normal runs.

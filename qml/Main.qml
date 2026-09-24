@@ -15,6 +15,7 @@ id: root
     title: qsTr("Qupil")
 
     property bool compact: width < 820
+    readonly property bool nativeMobileReminders: Qt.platform.os === "android" || Qt.platform.os === "ios"
     property string pageTitle: qsTr("Overview")
     property int currentNavigationIndex: 0
     property string lastRuntimeMinute: ""
@@ -44,11 +45,15 @@ id: root
     }
 
     function checkRuntimeNotifications(includeCurrentLesson) {
+        if (nativeMobileReminders && Qt.application.state !== Qt.ApplicationActive)
+            return
         const minuteKey = Qt.formatDateTime(new Date(), "yyyy-MM-dd hh:mm")
         if (!includeCurrentLesson && minuteKey === lastRuntimeMinute)
             return
         lastRuntimeMinute = minuteKey
         enqueueNotifications(App.lessonReminders(includeCurrentLesson))
+        if (nativeMobileReminders)
+            return
         const warnings = App.lessonEndWarnings()
         if (warnings && warnings.length > 0) {
             let messages = []
@@ -305,7 +310,7 @@ id: root
 
     Timer {
         interval: 10000
-        running: true
+        running: !root.nativeMobileReminders || Qt.application.state === Qt.ApplicationActive
         repeat: true
         onTriggered: root.checkRuntimeNotifications(false)
     }

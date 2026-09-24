@@ -2,7 +2,9 @@
 #pragma once
 
 #include <QObject>
+#include <QAudioOutput>
 #include <QElapsedTimer>
+#include <QMediaPlayer>
 #include <QSoundEffect>
 #include <QTimer>
 
@@ -30,6 +32,7 @@ public:
     Q_INVOKABLE void tapTempo();
     Q_INVOKABLE void playNotificationSound();
     Q_INVOKABLE void playLessonEndSound();
+    Q_INVOKABLE void previewReminderSound(const QString &profile, const QString &path, int volume);
     Q_INVOKABLE void playTuningTone(const QString &tone, int pitch);
 
 signals:
@@ -50,6 +53,12 @@ private:
     QSoundEffect m_accent;
     QSoundEffect m_tuning;
     QSoundEffect m_notification;
+    QMediaPlayer m_notificationCustom;
+    QAudioOutput m_notificationOutput;
     QSoundEffect m_lessonEnd;
+    QMediaPlayer m_lessonEndCustom;
+    QAudioOutput m_lessonEndOutput;
+    QMediaPlayer m_preview;
+    QAudioOutput m_previewOutput;
     QElapsedTimer m_tapTimer;
 };

@@ -822,7 +822,31 @@
             <source>Printing is available on the desktop build.</source>
             <translation>Drucken ist in der Desktop-Version verfügbar.</translation>
         </message>
-    </context>
+            <message>
+            <source>Unknown reminder sound profile.</source>
+            <translation>Unbekanntes Klangprofil für Erinnerungen.</translation>
+        </message>
+        <message>
+            <source>Please choose a supported sound file (WAV, AIFF, CAF, OGG, MP3 or M4A).</source>
+            <translation>Bitte eine unterstützte Klangdatei auswählen (WAV, AIFF, CAF, OGG, MP3 oder M4A).</translation>
+        </message>
+        <message>
+            <source>On iOS/iPadOS, custom background sounds must be WAV, AIFF or CAF.</source>
+            <translation>Unter iOS/iPadOS müssen eigene Hintergrundklänge WAV, AIFF oder CAF sein.</translation>
+        </message>
+        <message>
+            <source>Could not create the Qupil sound directory.</source>
+            <translation>Das Qupil-Klangverzeichnis konnte nicht erstellt werden.</translation>
+        </message>
+        <message>
+            <source>Could not import sound file: %1</source>
+            <translation>Klangdatei konnte nicht importiert werden: %1</translation>
+        </message>
+        <message>
+            <source>Reminder for %1</source>
+            <translation>Erinnerung für %1</translation>
+        </message>
+</context>
     <context>
         <name>ArchivePage</name>
         <message>
@@ -2683,7 +2707,31 @@
             <source>Settings saved</source>
             <translation>Einstellungen gespeichert</translation>
         </message>
-    </context>
+            <message>
+            <source>Built-in: %1</source>
+            <translation>Eingebaut: %1</translation>
+        </message>
+        <message>
+            <source>Choose lesson end sound</source>
+            <translation>Klang für Unterrichtsende auswählen</translation>
+        </message>
+        <message>
+            <source>Choose reminder sound</source>
+            <translation>Klang für Erinnerungen auswählen</translation>
+        </message>
+        <message>
+            <source>Sound files (*.wav *.aiff *.aif *.caf *.ogg *.mp3 *.m4a)</source>
+            <translation>Klangdateien (*.wav *.aiff *.aif *.caf *.ogg *.mp3 *.m4a)</translation>
+        </message>
+        <message>
+            <source>iOS notification sounds (*.wav *.aiff *.aif *.caf)</source>
+            <translation>iOS-Mitteilungsklänge (*.wav *.aiff *.aif *.caf)</translation>
+        </message>
+        <message>
+            <source>All files (*)</source>
+            <translation>Alle Dateien (*)</translation>
+        </message>
+</context>
     <context>
         <name>SettingsPageForm.ui</name>
         <message>
@@ -2796,7 +2844,43 @@
             <source>Restoring replaces the current data. Qupil creates a local safety copy before the replacement. Continue?</source>
             <translation>Beim Zurückspielen werden die aktuellen Daten ersetzt. Qupil erstellt vorher eine lokale Sicherheitskopie. Fortfahren?</translation>
         </message>
-    </context>
+            <message>
+            <source>Lesson end sound</source>
+            <translation>Klang für Unterrichtsende</translation>
+        </message>
+        <message>
+            <source>Choose…</source>
+            <translation>Auswählen…</translation>
+        </message>
+        <message>
+            <source>Default</source>
+            <translation>Standard</translation>
+        </message>
+        <message>
+            <source>Test</source>
+            <translation>Testen</translation>
+        </message>
+        <message>
+            <source>Volume</source>
+            <translation>Lautstärke</translation>
+        </message>
+        <message>
+            <source>Sound for reminders</source>
+            <translation>Klang für Erinnerungen</translation>
+        </message>
+        <message>
+            <source>On iOS/iPadOS, background notification sounds use the system notification volume. Custom background sounds must be WAV, AIFF or CAF and shorter than 30 seconds.</source>
+            <translation>Unter iOS/iPadOS verwenden Erinnerungsklänge im Hintergrund die Systemlautstärke für Mitteilungen. Eigene Hintergrundklänge müssen WAV, AIFF oder CAF und kürzer als 30 Sekunden sein.</translation>
+        </message>
+        <message>
+            <source>Android needs the 'Alarms &amp; reminders' permission for exact background timing.</source>
+            <translation>Android benötigt die Berechtigung 'Alarme &amp; Erinnerungen' für eine genaue Auslösung im Hintergrund.</translation>
+        </message>
+        <message>
+            <source>Allow exact alarms</source>
+            <translation>Genaue Alarme erlauben</translation>
+        </message>
+</context>
     <context>
         <name>LessonName</name>
         <message>

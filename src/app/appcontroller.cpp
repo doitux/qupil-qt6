@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "appcontroller.h"
 #include "native_share.h"
+#include "native_reminders.h"
 
 #include <QDate>
 #include <QCoreApplication>
@@ -20,6 +21,7 @@
 #include <QSqlQuery>
 #include <QSqlRecord>
 #include <QTime>
+#include <QTimer>
 #include <QTemporaryFile>
 #include <QTextDocument>
 #ifdef QUPIL_XDG_PORTAL_PRINTING
@@ -154,6 +156,13 @@ AppController::AppController(QObject *parent)
         refreshAll();
     }
     emit readyChanged();
+#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+    connect(this, &AppController::dataChanged, this, [this] {
+        QTimer::singleShot(0, this, &AppController::syncNativeReminders);
+    });
+    if (m_ready)
+        QTimer::singleShot(0, this, &AppController::syncNativeReminders);
+#endif
 }
 
 void AppController::setError(const QString &message)
@@ -2686,6 +2695,184 @@ QVariantList AppController::lessonEndWarnings() const
     return result;
 }
 
+QString AppController::importReminderSound(const QString &profile, const QUrl &source)
+{
+    const QString normalizedProfile = profile == QStringLiteral("lessonEnd")
+        ? QStringLiteral("lesson-end")
+        : profile == QStringLiteral("reminder") ? QStringLiteral("reminder") : QString{};
+    if (normalizedProfile.isEmpty()) {
+        setError(tr("Unknown reminder sound profile."));
+        return {};
+    }
+
+    const QString sourcePath = pathForUrl(source);
+    const QString suffix = QFileInfo(source.fileName()).suffix().toLower();
+#if defined(Q_OS_IOS)
+    const QSet<QString> supported = {QStringLiteral("wav"), QStringLiteral("aiff"),
+                                     QStringLiteral("aif"), QStringLiteral("caf")};
+    if (sourcePath.isEmpty() || !supported.contains(suffix)) {
+        setError(tr("On iOS/iPadOS, custom background sounds must be WAV, AIFF or CAF."));
+        return {};
+    }
+#else
+    const QSet<QString> supported = {QStringLiteral("wav"), QStringLiteral("aiff"), QStringLiteral("aif"),
+                                     QStringLiteral("caf"), QStringLiteral("ogg"), QStringLiteral("mp3"),
+                                     QStringLiteral("m4a")};
+    if (sourcePath.isEmpty() || !supported.contains(suffix)) {
+        setError(tr("Please choose a supported sound file (WAV, AIFF, CAF, OGG, MP3 or M4A)."));
+        return {};
+    }
+#endif
+
+    const QString soundDir = QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
+                                 .filePath(QStringLiteral("sounds/%1").arg(normalizedProfile));
+    if (!QDir().mkpath(soundDir)) {
+        setError(tr("Could not create the Qupil sound directory."));
+        return {};
+    }
+    QString fileName = QFileInfo(source.fileName()).fileName();
+    fileName.replace(QRegularExpression(QStringLiteral("[^A-Za-z0-9._ -]+")), QStringLiteral("_"));
+    if (fileName.isEmpty())
+        fileName = QStringLiteral("custom.%1").arg(suffix);
+    const QString destination = QDir(soundDir).filePath(fileName);
+    const QString canonicalSource = QFileInfo(sourcePath).canonicalFilePath();
+    const QString canonicalDestination = QFileInfo(destination).canonicalFilePath();
+    if (canonicalSource.isEmpty() || canonicalDestination.isEmpty() || canonicalSource != canonicalDestination) {
+        QString error;
+        if (!streamFile(sourcePath, destination, &error)) {
+            setError(tr("Could not import sound file: %1").arg(error));
+            return {};
+        }
+    }
+    const QFileInfoList oldFiles = QDir(soundDir).entryInfoList(QDir::Files | QDir::NoDotAndDotDot);
+    for (const QFileInfo &oldFile : oldFiles) {
+        if (oldFile.absoluteFilePath() != QFileInfo(destination).absoluteFilePath())
+            QFile::remove(oldFile.absoluteFilePath());
+    }
+    clearError();
+    return destination;
+}
+
+QVariantList AppController::nativeReminderSchedule() const
+{
+    QVariantList result;
+#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+    const auto lessons = selectRows(QStringLiteral(
+        "SELECT lessonid AS id, COALESCE(lessonday,-1) AS day, "
+        "COALESCE(lessonstarttime,'') AS start, COALESCE(lessonstoptime,'') AS stop "
+        "FROM lesson WHERE state=1 AND COALESCE(unsteadylesson,0)=0 "
+        "AND lessonday BETWEEN 0 AND 6 ORDER BY lessonday,lessonstarttime,lessonid"));
+
+    const bool endReminder = settingValue(QStringLiteral("lessonEndReminder"), true).toBool();
+    const int endMinutes = qBound(1, settingValue(QStringLiteral("minutesToLessonEndReminder"), 3).toInt(), 30);
+    QSet<QString> lessonEndSlots;
+    QSet<QString> reminderSlots;
+
+    const auto scheduledTime = [](int day, const QTime &time, int minuteOffset) {
+        int total = day * 24 * 60 + time.hour() * 60 + time.minute() + minuteOffset;
+        constexpr int weekMinutes = 7 * 24 * 60;
+        total %= weekMinutes;
+        if (total < 0)
+            total += weekMinutes;
+        QVariantMap out;
+        out.insert(QStringLiteral("day"), total / (24 * 60));
+        const int minuteOfDay = total % (24 * 60);
+        out.insert(QStringLiteral("hour"), minuteOfDay / 60);
+        out.insert(QStringLiteral("minute"), minuteOfDay % 60);
+        return out;
+    };
+
+    for (const QVariantMap &lesson : lessons) {
+        const int lessonId = lesson.value(QStringLiteral("id")).toInt();
+        const int day = lesson.value(QStringLiteral("day")).toInt();
+        const QTime start = QTime::fromString(lesson.value(QStringLiteral("start")).toString(), QStringLiteral("HH:mm"));
+        const QTime stop = QTime::fromString(lesson.value(QStringLiteral("stop")).toString(), QStringLiteral("HH:mm"));
+
+        if (endReminder && stop.isValid()) {
+            QVariantMap item = scheduledTime(day, stop, -endMinutes);
+            const QString slot = QStringLiteral("%1-%2-%3")
+                                     .arg(item.value(QStringLiteral("day")).toInt())
+                                     .arg(item.value(QStringLiteral("hour")).toInt())
+                                     .arg(item.value(QStringLiteral("minute")).toInt());
+            if (!lessonEndSlots.contains(slot)) {
+                lessonEndSlots.insert(slot);
+                item.insert(QStringLiteral("identifier"), QStringLiteral("qupil-lesson-end-%1").arg(slot));
+                item.insert(QStringLiteral("kind"), QStringLiteral("lessonEnd"));
+                item.insert(QStringLiteral("sound"), true);
+                result << item;
+            }
+        }
+
+        if (!start.isValid())
+            continue;
+        const auto reminders = selectRows(QStringLiteral(
+            "SELECT r.reminderid AS id, COALESCE(r.desc,'') AS description, "
+            "COALESCE(r.mode,0) AS mode, COALESCE(r.notificationsound,0) AS sound, "
+            "TRIM(COALESCE(p.forename,'') || ' ' || COALESCE(p.surname,'')) AS pupilName "
+            "FROM reminder r LEFT JOIN pupil p ON p.pupilid=r.pupilid "
+            "WHERE r.mode=1 OR (r.mode=2 AND EXISTS ("
+            "SELECT 1 FROM pupilatlesson pal WHERE pal.lessonid=? AND pal.pupilid=r.pupilid "
+            "AND pal.stopdate > date('now'))) ORDER BY r.mode,r.reminderid"), {lessonId});
+        for (const QVariantMap &reminder : reminders) {
+            QVariantMap item = scheduledTime(day, start, 0);
+            const int reminderId = reminder.value(QStringLiteral("id")).toInt();
+            const QString slot = QStringLiteral("%1-%2-%3-%4")
+                                     .arg(reminderId)
+                                     .arg(item.value(QStringLiteral("day")).toInt())
+                                     .arg(item.value(QStringLiteral("hour")).toInt())
+                                     .arg(item.value(QStringLiteral("minute")).toInt());
+            if (reminderSlots.contains(slot))
+                continue;
+            reminderSlots.insert(slot);
+            item.insert(QStringLiteral("identifier"), QStringLiteral("qupil-reminder-%1").arg(slot));
+            item.insert(QStringLiteral("kind"), QStringLiteral("reminder"));
+            const QString pupilName = reminder.value(QStringLiteral("pupilName")).toString();
+            item.insert(QStringLiteral("title"), pupilName.isEmpty()
+                            ? tr("Reminder")
+                            : tr("Reminder for %1").arg(pupilName));
+            item.insert(QStringLiteral("body"), reminder.value(QStringLiteral("description")).toString());
+            item.insert(QStringLiteral("sound"), reminder.value(QStringLiteral("sound")).toBool());
+            result << item;
+        }
+    }
+#endif
+    return result;
+}
+
+void AppController::syncNativeReminders()
+{
+#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+    if (!m_ready)
+        return;
+    const QVariantList schedule = nativeReminderSchedule();
+    QString error;
+    if (!qupilSyncNativeReminders(
+            schedule,
+            settingValue(QStringLiteral("lessonEndSoundPath"), QString{}).toString(),
+            qBound(0, settingValue(QStringLiteral("lessonEndSoundVolume"), 7).toInt(), 10),
+            settingValue(QStringLiteral("reminderSoundPath"), QString{}).toString(),
+            qBound(0, settingValue(QStringLiteral("reminderSoundVolume"), 7).toInt(), 10),
+            &error)) {
+        qWarning().noquote() << QStringLiteral("QUPIL_REMINDERS sync failed: %1")
+                                    .arg(error.isEmpty() ? QStringLiteral("native scheduler unavailable") : error);
+        return;
+    }
+    qInfo().noquote() << QStringLiteral("QUPIL_REMINDERS scheduled=%1 exact=%2")
+                             .arg(schedule.size())
+                             .arg(qupilExactAlarmPermissionGranted() ? QStringLiteral("yes") : QStringLiteral("no"));
+#endif
+}
+
+bool AppController::exactAlarmPermissionGranted() const
+{
+    return qupilExactAlarmPermissionGranted();
+}
+
+void AppController::requestExactAlarmPermission()
+{
+    qupilRequestExactAlarmPermission();
+}
+
 int AppController::saveReminder(const QVariantMap &v)
 {
     if (v.value(QStringLiteral("description")).toString().trimmed().isEmpty()) {
@@ -3137,6 +3324,10 @@ void AppController::importLegacySettings()
         {QStringLiteral("BirthdayReminder"), QStringLiteral("birthdayReminder")},
         {QStringLiteral("LessonEndMsg"), QStringLiteral("lessonEndReminder")},
         {QStringLiteral("MinutesToLessonEndForMsg"), QStringLiteral("minutesToLessonEndReminder")},
+        {QStringLiteral("MsgSoundFilePath"), QStringLiteral("lessonEndSoundPath")},
+        {QStringLiteral("LessonEndMsgSoundVolume"), QStringLiteral("lessonEndSoundVolume")},
+        {QStringLiteral("RemSoundFilePath"), QStringLiteral("reminderSoundPath")},
+        {QStringLiteral("RemSoundVolume"), QStringLiteral("reminderSoundVolume")},
         {QStringLiteral("RecitalIntervalCheckerOnlySolo"), QStringLiteral("recitalIntervalSoloOnly")},
         {QStringLiteral("SaveNotesPiecesForAllPupil"), QStringLiteral("saveNotesPiecesForAllPupils")},
         {QStringLiteral("LimitLoadLessonNotes"), QStringLiteral("limitLessonNotes")},

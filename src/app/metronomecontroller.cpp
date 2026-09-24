@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "metronomecontroller.h"
 
+#include <QFileInfo>
+#include <QSettings>
 #include <QUrl>
 #include <QtGlobal>
 
@@ -13,9 +15,17 @@ MetronomeController::MetronomeController(QObject *parent)
     m_accent.setVolume(0.9f);
     m_tuning.setVolume(0.9f);
     m_notification.setSource(QUrl(QStringLiteral("qrc:/qt/qml/Qupil/data/sounds/reminder.wav")));
-    m_notification.setVolume(0.8f);
+    m_notification.setVolume(0.7f);
+    m_notification.setLoopCount(1);
+    m_notificationCustom.setAudioOutput(&m_notificationOutput);
+    m_notificationOutput.setVolume(0.7f);
     m_lessonEnd.setSource(QUrl(QStringLiteral("qrc:/qt/qml/Qupil/data/sounds/lesson-end.wav")));
-    m_lessonEnd.setVolume(0.8f);
+    m_lessonEnd.setVolume(0.7f);
+    m_lessonEnd.setLoopCount(1);
+    m_lessonEndCustom.setAudioOutput(&m_lessonEndOutput);
+    m_lessonEndOutput.setVolume(0.7f);
+    m_preview.setAudioOutput(&m_previewOutput);
+    m_previewOutput.setVolume(0.7f);
     m_timer.setTimerType(Qt::PreciseTimer);
     connect(&m_timer, &QTimer::timeout, this, &MetronomeController::tick);
 }
@@ -84,16 +94,72 @@ void MetronomeController::tapTempo()
     }
 }
 
+namespace {
+QString reminderSoundPath(const QString &settingKey)
+{
+    const QString path = QSettings().value(QStringLiteral("settings/") + settingKey).toString();
+    return !path.isEmpty() && QFileInfo::exists(path) ? path : QString{};
+}
+
+float reminderSoundVolume(const QString &settingKey)
+{
+    return float(qBound(0, QSettings().value(QStringLiteral("settings/") + settingKey, 7).toInt(), 10)) / 10.0f;
+}
+
+void playCustom(QMediaPlayer &player, QAudioOutput &output, const QString &path, float volume)
+{
+    const QUrl source = QUrl::fromLocalFile(path);
+    player.stop();
+    if (player.source() != source)
+        player.setSource(source);
+    output.setVolume(volume);
+    player.setPosition(0);
+    player.play();
+}
+
+void playConfigured(QSoundEffect &fallback, QMediaPlayer &custom, QAudioOutput &output,
+                    const QString &path, float volume)
+{
+    if (!path.isEmpty()) {
+        fallback.stop();
+        playCustom(custom, output, path, volume);
+        return;
+    }
+    custom.stop();
+    fallback.stop();
+    fallback.setVolume(volume);
+    fallback.play();
+}
+}
+
 void MetronomeController::playNotificationSound()
 {
-    m_notification.stop();
-    m_notification.play();
+    playConfigured(m_notification, m_notificationCustom, m_notificationOutput,
+                   reminderSoundPath(QStringLiteral("reminderSoundPath")),
+                   reminderSoundVolume(QStringLiteral("reminderSoundVolume")));
 }
 
 void MetronomeController::playLessonEndSound()
 {
-    m_lessonEnd.stop();
-    m_lessonEnd.play();
+    playConfigured(m_lessonEnd, m_lessonEndCustom, m_lessonEndOutput,
+                   reminderSoundPath(QStringLiteral("lessonEndSoundPath")),
+                   reminderSoundVolume(QStringLiteral("lessonEndSoundVolume")));
+}
+
+void MetronomeController::previewReminderSound(const QString &profile, const QString &path, int volume)
+{
+    const float gain = float(qBound(0, volume, 10)) / 10.0f;
+    if (!path.isEmpty() && QFileInfo::exists(path)) {
+        m_notification.stop();
+        m_lessonEnd.stop();
+        playCustom(m_preview, m_previewOutput, path, gain);
+        return;
+    }
+    m_preview.stop();
+    QSoundEffect &fallback = profile == QStringLiteral("lessonEnd") ? m_lessonEnd : m_notification;
+    fallback.stop();
+    fallback.setVolume(gain);
+    fallback.play();
 }
 
 void MetronomeController::playTuningTone(const QString &tone, int pitch)

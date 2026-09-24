@@ -112,6 +112,10 @@ public:
     Q_INVOKABLE QVariantList startupReminders() const;
     Q_INVOKABLE QVariantList lessonReminders(bool includeCurrentLesson = false) const;
     Q_INVOKABLE QVariantList lessonEndWarnings() const;
+    Q_INVOKABLE QString importReminderSound(const QString &profile, const QUrl &source);
+    Q_INVOKABLE void syncNativeReminders();
+    Q_INVOKABLE bool exactAlarmPermissionGranted() const;
+    Q_INVOKABLE void requestExactAlarmPermission();
     Q_INVOKABLE int saveReminder(const QVariantMap &values);
     Q_INVOKABLE bool deleteReminder(int reminderId);
 
@@ -171,6 +175,7 @@ private:
     QString formatAutomaticLessonName(int type, int durationMinutes, const QString &locationToken,
                                       const QString &pupilToken) const;
     QString activeAutomaticLessonName(const QVariantMap &lessonRow, const QVariantList &members) const;
+    QVariantList nativeReminderSchedule() const;
     QString buildPupilArchiveHtml(int pupilId) const;
     void importLegacySettings();
     QString legacyConfigPath() const;
