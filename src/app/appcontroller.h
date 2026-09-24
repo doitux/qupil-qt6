@@ -26,6 +26,7 @@ class AppController final : public QObject
     Q_PROPERTY(VariantListModel* recitals READ recitals CONSTANT)
     Q_PROPERTY(VariantListModel* archive READ archive CONSTANT)
     Q_PROPERTY(QString pupilFilter READ pupilFilter WRITE setPupilFilter NOTIFY pupilFilterChanged)
+    Q_PROPERTY(QString nativeReminderDiagnostics READ nativeReminderDiagnostics NOTIFY nativeReminderDiagnosticsChanged)
 
 public:
     explicit AppController(QObject *parent = nullptr);
@@ -43,6 +44,7 @@ public:
     VariantListModel *archive() { return &m_archive; }
 
     QString pupilFilter() const { return m_pupilFilter; }
+    QString nativeReminderDiagnostics() const { return m_nativeReminderDiagnostics; }
     void setPupilFilter(const QString &value);
 
     Q_INVOKABLE void refreshAll();
@@ -116,6 +118,8 @@ public:
     Q_INVOKABLE void syncNativeReminders();
     Q_INVOKABLE bool exactAlarmPermissionGranted() const;
     Q_INVOKABLE void requestExactAlarmPermission();
+    Q_INVOKABLE void refreshNativeReminderDiagnostics();
+    Q_INVOKABLE bool scheduleNativeReminderTest();
     Q_INVOKABLE int saveReminder(const QVariantMap &values);
     Q_INVOKABLE bool deleteReminder(int reminderId);
 
@@ -145,6 +149,7 @@ signals:
     void readyChanged();
     void lastErrorChanged();
     void pupilFilterChanged();
+    void nativeReminderDiagnosticsChanged();
     void dataChanged();
 
 #ifdef QUPIL_XDG_PORTAL_PRINTING
@@ -200,6 +205,7 @@ private:
     bool m_ready = false;
     QString m_lastError;
     QString m_pupilFilter;
+    QString m_nativeReminderDiagnostics;
 
     VariantListModel m_pupils;
     VariantListModel m_lessons;

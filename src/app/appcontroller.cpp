@@ -12,6 +12,7 @@
 #include <QLocale>
 #include <QPageLayout>
 #include <QPageSize>
+#include <QPointer>
 #include <QPdfWriter>
 #include <QStandardPaths>
 #include <QSettings>
@@ -2798,6 +2799,8 @@ QVariantList AppController::nativeReminderSchedule() const
                 lessonEndSlots.insert(slot);
                 item.insert(QStringLiteral("identifier"), QStringLiteral("qupil-lesson-end-%1").arg(slot));
                 item.insert(QStringLiteral("kind"), QStringLiteral("lessonEnd"));
+                item.insert(QStringLiteral("title"), QStringLiteral("Qupil"));
+                item.insert(QStringLiteral("body"), tr("Lesson ending soon"));
                 item.insert(QStringLiteral("sound"), true);
                 result << item;
             }
@@ -2871,6 +2874,91 @@ bool AppController::exactAlarmPermissionGranted() const
 void AppController::requestExactAlarmPermission()
 {
     qupilRequestExactAlarmPermission();
+}
+
+void AppController::refreshNativeReminderDiagnostics()
+{
+#if defined(Q_OS_IOS)
+    const QString loading = tr("Loading iOS notification status…");
+    if (m_nativeReminderDiagnostics != loading) {
+        m_nativeReminderDiagnostics = loading;
+        emit nativeReminderDiagnosticsChanged();
+    }
+
+    QPointer<AppController> self(this);
+    qupilFetchNativeReminderDiagnostics([self](const QVariantMap &info) {
+        if (!self)
+            return;
+        QMetaObject::invokeMethod(self, [self, info]() {
+            if (!self)
+                return;
+            QStringList lines;
+            lines << QStringLiteral("authorization=%1  sound=%2  alert=%3")
+                         .arg(info.value(QStringLiteral("authorization")).toString(),
+                              info.value(QStringLiteral("sound")).toString(),
+                              info.value(QStringLiteral("alert")).toString());
+            lines << QStringLiteral("notificationCenter=%1  lockScreen=%2")
+                         .arg(info.value(QStringLiteral("notificationCenter")).toString(),
+                              info.value(QStringLiteral("lockScreen")).toString());
+            lines << QStringLiteral("pending=%1  lessonEnd=%2  reminders=%3  tests=%4")
+                         .arg(info.value(QStringLiteral("pendingQupil")).toInt())
+                         .arg(info.value(QStringLiteral("pendingLessonEnd")).toInt())
+                         .arg(info.value(QStringLiteral("pendingReminders")).toInt())
+                         .arg(info.value(QStringLiteral("pendingTests")).toInt());
+            lines << QStringLiteral("Library/Sounds: lesson-end.wav=%1  reminder.wav=%2")
+                         .arg(info.value(QStringLiteral("builtInLessonSoundPresent")).toBool()
+                                  ? QStringLiteral("yes") : QStringLiteral("no"),
+                              info.value(QStringLiteral("builtInReminderSoundPresent")).toBool()
+                                  ? QStringLiteral("yes") : QStringLiteral("no"));
+            const QStringList next = info.value(QStringLiteral("nextRequests")).toStringList();
+            if (!next.isEmpty()) {
+                lines << QStringLiteral("next:");
+                for (const QString &entry : next)
+                    lines << QStringLiteral("  %1").arg(entry);
+            }
+            const QString summary = lines.join(QLatin1Char('\n'));
+            qInfo().noquote() << QStringLiteral("QUPIL_IOS_REMINDERS\n%1").arg(summary);
+            if (self->m_nativeReminderDiagnostics != summary) {
+                self->m_nativeReminderDiagnostics = summary;
+                emit self->nativeReminderDiagnosticsChanged();
+            }
+        }, Qt::QueuedConnection);
+    });
+#else
+    const QString unavailable = tr("Native reminder diagnostics are only available on iOS/iPadOS.");
+    if (m_nativeReminderDiagnostics != unavailable) {
+        m_nativeReminderDiagnostics = unavailable;
+        emit nativeReminderDiagnosticsChanged();
+    }
+#endif
+}
+
+bool AppController::scheduleNativeReminderTest()
+{
+#if defined(Q_OS_IOS)
+    clearError();
+    QString error;
+    const int volume = qBound(0, settingValue(QStringLiteral("lessonEndSoundVolume"), 7).toInt(), 10);
+    if (volume <= 0) {
+        setError(tr("Lesson end sound volume is 0."));
+        return false;
+    }
+    const bool ok = qupilScheduleNativeReminderTest(
+        settingValue(QStringLiteral("lessonEndSoundPath"), QString{}).toString(),
+        volume,
+        tr("Qupil background reminder test"),
+        tr("If you can see and hear this while Qupil is in the background, iOS delivery works."),
+        &error);
+    if (!ok) {
+        setError(error.isEmpty() ? tr("Could not schedule the iOS background reminder test.") : error);
+        return false;
+    }
+    QTimer::singleShot(500, this, &AppController::refreshNativeReminderDiagnostics);
+    return true;
+#else
+    setError(tr("The background reminder test is only available on iOS/iPadOS."));
+    return false;
+#endif
 }
 
 int AppController::saveReminder(const QVariantMap &v)

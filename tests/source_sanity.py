@@ -157,8 +157,22 @@ assert "createNotificationChannel(context)" in android_receiver
 assert "isAppForeground" in android_receiver and "inAppReminder" in android_receiver
 assert "UNUserNotificationCenter" in ios_scheduler
 assert "UNCalendarNotificationTrigger" in ios_scheduler
+assert "UNTimeIntervalNotificationTrigger" in ios_scheduler
+assert 'UNAuthorizationOptionAlert | UNAuthorizationOptionSound' in ios_scheduler
 assert 'LibraryDirectory' in ios_scheduler and 'soundNamed:' in ios_scheduler
+assert ':/qt/qml/Qupil/data/sounds/lesson-end.wav' in ios_scheduler
+assert ':/qt/qml/Qupil/data/sounds/reminder.wav' in ios_scheduler
+assert 'copyQtResource' in ios_scheduler and 'Library/Sounds' in ios_scheduler
+assert 'qupil-test-background' in ios_scheduler
+assert 'getPendingNotificationRequestsWithCompletionHandler' in ios_scheduler
 assert 'UIApplicationStateActive' in ios_scheduler
+assert 'item.insert(QStringLiteral("title"), QStringLiteral("Qupil"))' in app_cpp
+assert 'item.insert(QStringLiteral("body"), tr("Lesson ending soon"))' in app_cpp
+assert 'scheduleNativeReminderTest()' in app_cpp
+assert 'refreshNativeReminderDiagnostics()' in app_cpp
+assert 'iosBackgroundTestAction' in settings_qml
+assert 'nativeReminderDiagnostics: App.nativeReminderDiagnostics' in settings_qml
+assert 'iOS background notification test' in settings_form
 assert 'lesson-end.wav' in cmake and 'reminder.wav' in cmake
 metronome_h = (ROOT / "src/app/metronomecontroller.h").read_text(encoding="utf-8")
 assert "QMediaPlayer m_notificationCustom" in metronome_h and "QMediaPlayer m_lessonEndCustom" in metronome_h

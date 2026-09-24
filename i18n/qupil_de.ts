@@ -846,6 +846,38 @@
             <source>Reminder for %1</source>
             <translation>Erinnerung für %1</translation>
         </message>
+        <message>
+            <source>Lesson ending soon</source>
+            <translation>Unterricht endet bald</translation>
+        </message>
+        <message>
+            <source>Loading iOS notification status…</source>
+            <translation>iOS-Mitteilungsstatus wird geladen…</translation>
+        </message>
+        <message>
+            <source>Native reminder diagnostics are only available on iOS/iPadOS.</source>
+            <translation>Native Erinnerungsdiagnose ist nur unter iOS/iPadOS verfügbar.</translation>
+        </message>
+        <message>
+            <source>Qupil background reminder test</source>
+            <translation>Qupil-Hintergrunderinnerungstest</translation>
+        </message>
+        <message>
+            <source>If you can see and hear this while Qupil is in the background, iOS delivery works.</source>
+            <translation>Wenn du dies sehen und hören kannst, während Qupil im Hintergrund ist, funktioniert die iOS-Zustellung.</translation>
+        </message>
+        <message>
+            <source>Could not schedule the iOS background reminder test.</source>
+            <translation>Der iOS-Hintergrunderinnerungstest konnte nicht geplant werden.</translation>
+        </message>
+        <message>
+            <source>The background reminder test is only available on iOS/iPadOS.</source>
+            <translation>Der Hintergrunderinnerungstest ist nur unter iOS/iPadOS verfügbar.</translation>
+        </message>
+        <message>
+            <source>Lesson end sound volume is 0.</source>
+            <translation>Die Lautstärke für den Unterrichtsende-Ton ist 0.</translation>
+        </message>
 </context>
     <context>
         <name>ArchivePage</name>
@@ -2731,6 +2763,10 @@
             <source>All files (*)</source>
             <translation>Alle Dateien (*)</translation>
         </message>
+        <message>
+            <source>An iOS local notification is scheduled for 15 seconds from now. Put Qupil in the background immediately and wait for the system notification and sound.</source>
+            <translation>Eine lokale iOS-Mitteilung wurde für in 15 Sekunden geplant. Schiebe Qupil sofort in den Hintergrund und warte auf die Systemmitteilung und den Ton.</translation>
+        </message>
 </context>
     <context>
         <name>SettingsPageForm.ui</name>
@@ -2879,6 +2915,22 @@
         <message>
             <source>Allow exact alarms</source>
             <translation>Genaue Alarme erlauben</translation>
+        </message>
+        <message>
+            <source>iOS background notification test</source>
+            <translation>iOS-Hintergrundmitteilung testen</translation>
+        </message>
+        <message>
+            <source>Schedules a real iOS local notification 15 seconds in the future. Start the test, put Qupil in the background immediately, and wait.</source>
+            <translation>Plant eine echte lokale iOS-Mitteilung in 15 Sekunden. Starte den Test, schiebe Qupil sofort in den Hintergrund und warte.</translation>
+        </message>
+        <message>
+            <source>Test in 15 seconds</source>
+            <translation>In 15 Sekunden testen</translation>
+        </message>
+        <message>
+            <source>Refresh status</source>
+            <translation>Status aktualisieren</translation>
         </message>
 </context>
     <context>

@@ -15,3 +15,19 @@ bool qupilExactAlarmPermissionGranted()
 void qupilRequestExactAlarmPermission()
 {
 }
+
+
+bool qupilScheduleNativeReminderTest(const QString &, int, const QString &, const QString &, QString *errorMessage)
+{
+    if (errorMessage)
+        *errorMessage = QStringLiteral("Native reminder test is only available on iOS.");
+    return false;
+}
+
+void qupilFetchNativeReminderDiagnostics(QupilReminderDiagnosticsCallback callback)
+{
+    if (callback) {
+        callback({{QStringLiteral("platform"), QStringLiteral("desktop")},
+                  {QStringLiteral("available"), false}});
+    }
+}

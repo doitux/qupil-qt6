@@ -13,6 +13,7 @@ Item {
     property bool importedLegacyDatabase: false
     property int languageIndex: 0
     property bool androidExactAlarmGranted: true
+    property string nativeReminderDiagnostics: ""
 
     property var backupAction: null
     property var restoreAction: null
@@ -25,6 +26,8 @@ Item {
     property var defaultReminderSoundAction: null
     property var testReminderSoundAction: null
     property var exactAlarmAction: null
+    property var iosBackgroundTestAction: null
+    property var iosDiagnosticsRefreshAction: null
 
     property alias languageCombo: languageCombo
     property alias birthdayReminder: birthdayReminder
@@ -115,6 +118,34 @@ Item {
                     wrapMode: Text.WordWrap
                     opacity: 0.7
                     Layout.fillWidth: true
+                }
+                ColumnLayout {
+                    visible: Qt.platform.os === "ios"
+                    Layout.fillWidth: true
+                    spacing: 6
+                    Label {
+                        text: qsTr("iOS background notification test")
+                        font.bold: true
+                    }
+                    Label {
+                        text: qsTr("Schedules a real iOS local notification 15 seconds in the future. Start the test, put Qupil in the background immediately, and wait.")
+                        wrapMode: Text.WordWrap
+                        opacity: 0.75
+                        Layout.fillWidth: true
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Button { text: qsTr("Test in 15 seconds"); action: root.iosBackgroundTestAction }
+                        Button { text: qsTr("Refresh status"); action: root.iosDiagnosticsRefreshAction }
+                        Item { Layout.fillWidth: true }
+                    }
+                    Label {
+                        text: root.nativeReminderDiagnostics
+                        font.family: "monospace"
+                        wrapMode: Text.WrapAnywhere
+                        opacity: 0.8
+                        Layout.fillWidth: true
+                    }
                 }
                 RowLayout {
                     visible: Qt.platform.os === "android" && !root.androidExactAlarmGranted

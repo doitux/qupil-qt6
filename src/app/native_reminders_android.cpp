@@ -59,3 +59,19 @@ void qupilRequestExactAlarmPermission()
         "(Landroid/content/Context;)V",
         context.object<jobject>());
 }
+
+
+bool qupilScheduleNativeReminderTest(const QString &, int, const QString &, const QString &, QString *errorMessage)
+{
+    if (errorMessage)
+        *errorMessage = QStringLiteral("Native reminder test is currently only available on iOS.");
+    return false;
+}
+
+void qupilFetchNativeReminderDiagnostics(QupilReminderDiagnosticsCallback callback)
+{
+    if (callback) {
+        callback({{QStringLiteral("platform"), QStringLiteral("android")},
+                  {QStringLiteral("available"), false}});
+    }
+}

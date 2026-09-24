@@ -33,6 +33,8 @@ Page {
         form.lessonEndVolume.value = App.settingValue("lessonEndSoundVolume", 7)
         form.reminderVolume.value = App.settingValue("reminderSoundVolume", 7)
         form.androidExactAlarmGranted = App.exactAlarmPermissionGranted()
+        if (Qt.platform.os === "ios")
+            App.refreshNativeReminderDiagnostics()
         form.shareLessonContent.checked = App.settingValue("saveNotesPiecesForAllPupils", true)
     }
 
@@ -86,6 +88,16 @@ Page {
         onTriggered: Metronome.previewReminderSound("reminder", root.reminderSoundPath, Math.round(form.reminderVolume.value))
     }
     Action { id: exactAlarmAction; onTriggered: App.requestExactAlarmPermission() }
+    Action {
+        id: iosBackgroundTestAction
+        onTriggered: {
+            if (App.scheduleNativeReminderTest())
+                iosTestScheduled.open()
+            else
+                soundImportFailed.open()
+        }
+    }
+    Action { id: iosDiagnosticsRefreshAction; onTriggered: App.refreshNativeReminderDiagnostics() }
 
     SettingsPageForm {
         id: form
@@ -104,6 +116,9 @@ Page {
         defaultReminderSoundAction: defaultReminderSoundAction
         testReminderSoundAction: testReminderSoundAction
         exactAlarmAction: exactAlarmAction
+        iosBackgroundTestAction: iosBackgroundTestAction
+        iosDiagnosticsRefreshAction: iosDiagnosticsRefreshAction
+        nativeReminderDiagnostics: App.nativeReminderDiagnostics
 
         languageCombo.onActivated: {
             const modes = ["system", "en", "de"]
@@ -168,6 +183,16 @@ Page {
     Popup { id: backupSaved; anchors.centerIn: parent; Label { text: qsTr("Backup created") } }
     Popup { id: backupRestored; anchors.centerIn: parent; Label { text: qsTr("Backup restored") } }
     Popup { id: saved; anchors.centerIn: parent; Label { text: qsTr("Settings saved") } }
+    Popup {
+        id: iosTestScheduled
+        anchors.centerIn: parent
+        width: Math.min(560, root.width - 32)
+        Label {
+            width: parent.width
+            text: qsTr("An iOS local notification is scheduled for 15 seconds from now. Put Qupil in the background immediately and wait for the system notification and sound.")
+            wrapMode: Text.WordWrap
+        }
+    }
     Popup {
         id: soundImportFailed
         anchors.centerIn: parent
