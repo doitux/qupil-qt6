@@ -44,7 +44,7 @@ jobs:
   #
   # Wichtig:
   # Qt-Paket ist MSVC 2022. Deshalb benutzen wir auch wirklich cl.exe/MSVC.
-  # Der Runner windows-2022 enthaelt VS 2022; msvc-dev-cmd setzt die Umgebung.
+  # Der Runner windows-2022 enthaelt VS 2022; VsDevCmd.bat setzt die Umgebung nativ.
   # Ninja vermeidet Generator-/Visual-Studio-Discovery-Probleme.
   # ---------------------------------------------------------------------------
   windows:
@@ -55,7 +55,7 @@ jobs:
 
     steps:
       - name: Checkout Qupil
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.source_ref }}
           submodules: recursive
@@ -71,9 +71,66 @@ jobs:
           cache: true
 
       - name: Enable MSVC 2022 x64 environment
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (-not (Test-Path $vswhere)) {
+            throw "vswhere.exe not found: $vswhere"
+          }
+
+          $vsInstall = & $vswhere `
+            -latest `
+            -products '*' `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -property installationPath | Select-Object -First 1
+
+          if ([string]::IsNullOrWhiteSpace($vsInstall)) {
+            throw "Visual Studio with the x64 C++ toolchain was not found."
+          }
+
+          $vsInstall = $vsInstall.Trim()
+          $vsDevCmd = Join-Path $vsInstall "Common7\Tools\VsDevCmd.bat"
+          if (-not (Test-Path $vsDevCmd)) {
+            throw "VsDevCmd.bat not found: $vsDevCmd"
+          }
+
+          Write-Host "Visual Studio: $vsInstall"
+          Write-Host "VsDevCmd:      $vsDevCmd"
+
+          $command = "call `"$vsDevCmd`" -no_logo -arch=amd64 -host_arch=amd64 && set"
+          $devEnvironment = & $env:ComSpec /d /s /c $command
+          if ($LASTEXITCODE -ne 0) {
+            throw "VsDevCmd.bat failed with exit code $LASTEXITCODE"
+          }
+
+          foreach ($line in $devEnvironment) {
+            $separator = $line.IndexOf('=')
+            if ($separator -le 0) {
+              continue
+            }
+
+            $name = $line.Substring(0, $separator)
+            $value = $line.Substring($separator + 1)
+
+            if ($name -ieq 'PATH') {
+              foreach ($entry in $value.Split(';')) {
+                if (-not [string]::IsNullOrWhiteSpace($entry)) {
+                  Add-Content -Path $env:GITHUB_PATH -Value $entry
+                }
+              }
+              continue
+            }
+
+            if ($name.StartsWith('GITHUB_', [System.StringComparison]::OrdinalIgnoreCase) -or
+                $name.StartsWith('RUNNER_', [System.StringComparison]::OrdinalIgnoreCase) -or
+                $name -ieq 'CI') {
+              continue
+            }
+
+            Add-Content -Path $env:GITHUB_ENV -Value "$name=$value"
+          }
 
       - name: Toolchain preflight
         shell: pwsh
@@ -162,7 +219,7 @@ jobs:
           Compress-Archive -Path "$dist\*" -DestinationPath $zip
 
       - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Qupil-Windows-x64
           path: dist/Qupil-Windows-x64.zip
@@ -183,7 +240,7 @@ jobs:
 
     steps:
       - name: Checkout Qupil
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.source_ref }}
           submodules: recursive
@@ -280,7 +337,7 @@ jobs:
           fi
 
       - name: Upload macOS artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Qupil-macOS-arm64
           path: |
@@ -306,13 +363,13 @@ jobs:
 
     steps:
       - name: Checkout Qupil
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.source_ref }}
           submodules: recursive
 
       - name: Install JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
@@ -415,7 +472,7 @@ jobs:
           done
 
       - name: Upload Android artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Qupil-Android-arm64
           path: dist/*.apk
