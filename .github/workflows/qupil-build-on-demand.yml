@@ -338,7 +338,7 @@ jobs:
         uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.CI_QT_VERSION }}
-          host: linux
+          host: all_os
           target: android
           arch: android_arm64_v8a
           modules: "qtmultimedia"
