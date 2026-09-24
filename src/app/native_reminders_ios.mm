@@ -148,6 +148,9 @@ void replaceQupilSchedule(UNUserNotificationCenter *center,
                           NSString *reminderSoundName,
                           int reminderVolume)
 {
+    // This callback is asynchronous. Keep an owned Qt value instead of
+    // retaining the caller's reference after replaceQupilSchedule() returns.
+    const QVariantList ownedSchedule = schedule;
     [center getPendingNotificationRequestsWithCompletionHandler:^(NSArray<UNNotificationRequest *> *requests) {
         NSMutableArray<NSString *> *identifiers = [NSMutableArray array];
         for (UNNotificationRequest *request in requests) {
@@ -157,7 +160,7 @@ void replaceQupilSchedule(UNUserNotificationCenter *center,
         }
         if (identifiers.count > 0)
             [center removePendingNotificationRequestsWithIdentifiers:identifiers];
-        installSchedule(center, schedule, lessonEndSoundName, lessonEndVolume,
+        installSchedule(center, ownedSchedule, lessonEndSoundName, lessonEndVolume,
                         reminderSoundName, reminderVolume);
     }];
 }
@@ -173,17 +176,21 @@ bool qupilSyncNativeReminders(const QVariantList &schedule,
 {
     (void)errorMessage;
 
+    // Notification settings and authorization complete asynchronously. Copy
+    // AppController's reference before any callback can outlive this function.
+    const QVariantList ownedSchedule = schedule;
+
     UNUserNotificationCenter *center = UNUserNotificationCenter.currentNotificationCenter;
     center.delegate = notificationDelegate();
     NSString *lessonSound = prepareCustomSound(lessonEndSoundPath, @"qupil-lesson-end", @"lesson-end.wav");
     NSString *reminderSound = prepareCustomSound(reminderSoundPath, @"qupil-reminder", @"reminder.wav");
-    if (schedule.isEmpty()) {
+    if (ownedSchedule.isEmpty()) {
         replaceQupilSchedule(center, {}, lessonSound, lessonEndVolume, reminderSound, reminderVolume);
         return true;
     }
 
     UNAuthorizationOptions authorizationOptions = UNAuthorizationOptionSound;
-    for (const QVariant &value : schedule) {
+    for (const QVariant &value : ownedSchedule) {
         if (value.toMap().value(QStringLiteral("kind")).toString() == QStringLiteral("reminder")) {
             authorizationOptions |= UNAuthorizationOptionAlert;
             break;
@@ -201,11 +208,11 @@ bool qupilSyncNativeReminders(const QVariantList &schedule,
                 if (error)
                     NSLog(@"Qupil notification permission request failed: %@", error);
                 if (granted)
-                    replaceQupilSchedule(center, schedule, lessonSound, lessonEndVolume, reminderSound, reminderVolume);
+                    replaceQupilSchedule(center, ownedSchedule, lessonSound, lessonEndVolume, reminderSound, reminderVolume);
             }];
             return;
         }
-        replaceQupilSchedule(center, schedule, lessonSound, lessonEndVolume, reminderSound, reminderVolume);
+        replaceQupilSchedule(center, ownedSchedule, lessonSound, lessonEndVolume, reminderSound, reminderVolume);
     }];
     return true;
 }

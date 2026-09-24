@@ -171,6 +171,9 @@ for legacy_key, current_key in (
 ):
     assert legacy_key in app_cpp and current_key in app_cpp
 assert "removeAllPendingNotificationRequests" not in ios_scheduler
+assert ios_scheduler.count("const QVariantList ownedSchedule = schedule;") == 2
+assert "installSchedule(center, ownedSchedule" in ios_scheduler
+assert "installSchedule(center, schedule, lessonEndSoundName" not in ios_scheduler
 assert (ROOT / "android/res/raw/lesson_end.wav").exists()
 assert (ROOT / "android/res/raw/reminder.wav").exists()
 
