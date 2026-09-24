@@ -1,4 +1,5 @@
 # QUPIL_CI_MANAGED
+# QUPIL_NATIVE_ARTIFACTS_V1
 #
 # Qupil Cross-Platform CI
 # Linux wird absichtlich lokal mit Qt Creator gebaut.
@@ -177,10 +178,18 @@ jobs:
           $ErrorActionPreference = "Stop"
           cmake --build build/windows --parallel
 
-      - name: Package portable Windows build
+      - name: Build Windows installer
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+
+          $versionMatch = Select-String -Path "CMakeLists.txt" -Pattern 'project\(Qupil\s+VERSION\s+([0-9.]+)'
+          if (-not $versionMatch) {
+            throw "Qupil version not found in CMakeLists.txt"
+          }
+          $version = $versionMatch.Matches[0].Groups[1].Value
+          $commit = (git rev-parse --short=7 HEAD).Trim()
+          $baseName = "Qupil-$version-$commit-Windows-x64-Setup"
 
           $exe = Get-ChildItem build/windows -Recurse -File -Filter "qupil.exe" |
             Where-Object { $_.FullName -notmatch "[\\/]CMakeFiles[\\/]" } |
@@ -190,12 +199,14 @@ jobs:
             Write-Host "Build files:"
             Get-ChildItem build/windows -Recurse -File |
               Select-Object -First 200 FullName
-            throw "qupil.exe wurde nicht gefunden."
+            throw "qupil.exe was not found."
           }
 
           $distRoot = Join-Path $env:GITHUB_WORKSPACE "dist"
           $dist = Join-Path $distRoot "Qupil-Windows-x64"
-
+          if (Test-Path $distRoot) {
+            Remove-Item $distRoot -Recurse -Force
+          }
           New-Item -ItemType Directory -Force -Path $dist | Out-Null
 
           $destExe = Join-Path $dist "qupil.exe"
@@ -206,26 +217,57 @@ jobs:
             --compiler-runtime `
             --dir "$dist" `
             "$destExe"
+          if ($LASTEXITCODE -ne 0) {
+            throw "windeployqt failed with exit code $LASTEXITCODE"
+          }
 
           if (Test-Path "data") {
             Copy-Item "data" (Join-Path $dist "data") -Recurse -Force
           }
 
-          $zip = Join-Path $distRoot "Qupil-Windows-x64.zip"
-          if (Test-Path $zip) {
-            Remove-Item $zip -Force
+          $isccCommand = Get-Command "ISCC.exe" -ErrorAction SilentlyContinue
+          if ($isccCommand) {
+            $iscc = $isccCommand.Source
+          } else {
+            $candidates = @(
+              "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+              "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+            )
+            $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $iscc) {
+            throw "Inno Setup ISCC.exe was not found on the windows-2022 runner."
           }
 
-          Compress-Archive -Path "$dist\*" -DestinationPath $zip
+          $env:QUPIL_INSTALLER_VERSION = $version
+          $env:QUPIL_INSTALLER_SOURCE_DIR = $dist
+          $env:QUPIL_INSTALLER_OUTPUT_DIR = $distRoot
+          $env:QUPIL_INSTALLER_BASE_NAME = $baseName
 
-      - name: Upload Windows artifact
+          Write-Host "Inno Setup: $iscc"
+          Write-Host "Installer:  $baseName.exe"
+          & $iscc ".github\packaging\windows\Qupil.iss"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Inno Setup failed with exit code $LASTEXITCODE"
+          }
+
+          $installer = Join-Path $distRoot "$baseName.exe"
+          if (-not (Test-Path $installer)) {
+            throw "Expected installer was not created: $installer"
+          }
+          if ((Get-Item $installer).Length -le 0) {
+            throw "Installer is empty: $installer"
+          }
+
+          Get-Item $installer | Format-List FullName, Length
+
+      - name: Upload Windows installer
         uses: actions/upload-artifact@v7
         with:
-          name: Qupil-Windows-x64
-          path: dist/Qupil-Windows-x64.zip
+          path: dist/Qupil-*-Windows-x64-Setup.exe
+          archive: false
           if-no-files-found: error
           retention-days: 14
-
 
   # ---------------------------------------------------------------------------
   # macOS ARM64
@@ -292,60 +334,53 @@ jobs:
           set -euxo pipefail
           cmake --build build/macos --parallel
 
-      - name: Package macOS build
+      - name: Build macOS DMG
         shell: bash
         run: |
           set -euxo pipefail
 
-          mkdir -p dist/Qupil-macOS-arm64
+          VERSION="$(sed -nE 's/^[[:space:]]*project\(Qupil[[:space:]]+VERSION[[:space:]]+([0-9.]+).*/\1/p' CMakeLists.txt | head -n1)"
+          [[ -n "$VERSION" ]]
+          COMMIT_SHORT="$(git rev-parse --short=7 HEAD)"
+          DMG="dist/Qupil-${VERSION}-${COMMIT_SHORT}-macOS-arm64.dmg"
+
+          rm -rf dist
+          mkdir -p dist/dmg-root
 
           APP="$(find build/macos -type d -name '*.app' -print -quit || true)"
-
-          if [[ -n "$APP" ]]; then
-              echo "Found app: $APP"
-
-              "$QT_ROOT_DIR/bin/macdeployqt" "$APP"
-
-              cp -R "$APP" dist/Qupil-macOS-arm64/
-
-              if [[ -d data ]]; then
-                  cp -R data dist/Qupil-macOS-arm64/
-              fi
-
-              (
-                  cd dist
-                  ditto -c -k --sequesterRsrc --keepParent \
-                    Qupil-macOS-arm64 \
-                    Qupil-macOS-arm64.zip
-              )
-          else
-              BIN="$(find build/macos -type f -name qupil -perm -111 -print -quit || true)"
-
-              if [[ -z "$BIN" ]]; then
-                  find build/macos -maxdepth 4 -type f -print | head -200
-                  echo "Weder .app-Bundle noch qupil-Binary gefunden." >&2
-                  exit 1
-              fi
-
-              cp "$BIN" dist/Qupil-macOS-arm64/
-
-              if [[ -d data ]]; then
-                  cp -R data dist/Qupil-macOS-arm64/
-              fi
-
-              tar -C dist -czf dist/Qupil-macOS-arm64.tar.gz Qupil-macOS-arm64
+          if [[ -z "$APP" ]]; then
+              find build/macos -maxdepth 5 -type f -print | head -200
+              echo "No .app bundle was found; cannot create a macOS DMG." >&2
+              exit 1
           fi
 
-      - name: Upload macOS artifact
+          echo "Found app: $APP"
+          "$QT_ROOT_DIR/bin/macdeployqt" "$APP"
+
+          cp -R "$APP" dist/dmg-root/Qupil.app
+          if [[ -d data ]]; then
+              cp -R data dist/dmg-root/data
+          fi
+          ln -s /Applications dist/dmg-root/Applications
+
+          hdiutil create \
+            -volname "Qupil ${VERSION}" \
+            -srcfolder dist/dmg-root \
+            -ov \
+            -format UDZO \
+            "$DMG"
+
+          test -s "$DMG"
+          hdiutil verify "$DMG"
+          ls -lh "$DMG"
+
+      - name: Upload macOS DMG
         uses: actions/upload-artifact@v7
         with:
-          name: Qupil-macOS-arm64
-          path: |
-            dist/Qupil-macOS-arm64.zip
-            dist/Qupil-macOS-arm64.tar.gz
+          path: dist/Qupil-*-macOS-arm64.dmg
+          archive: false
           if-no-files-found: error
           retention-days: 14
-
 
   # ---------------------------------------------------------------------------
   # ANDROID ARM64
@@ -455,30 +490,38 @@ jobs:
         run: |
           set -euxo pipefail
 
+          VERSION="$(sed -nE 's/^[[:space:]]*project\(Qupil[[:space:]]+VERSION[[:space:]]+([0-9.]+).*/\1/p' CMakeLists.txt | head -n1)"
+          [[ -n "$VERSION" ]]
+          COMMIT_SHORT="$(git rev-parse --short=7 HEAD)"
+
+          rm -rf dist
           mkdir -p dist
 
-          mapfile -t APKS < <(
-              find build/android -type f -name '*.apk' -print
-          )
-
+          mapfile -t APKS < <(find build/android -type f -name '*.apk' -print)
           if ((${#APKS[@]} == 0)); then
-              echo "Kein APK gefunden." >&2
-              find build/android -maxdepth 6 -type f -print | head -300
+              echo "No APK was found." >&2
+              find build/android -maxdepth 7 -type f -print | head -300
               exit 1
           fi
 
-          for apk in "${APKS[@]}"; do
-              cp "$apk" "dist/$(basename "$apk")"
-          done
+          printf 'APK candidates:\n'
+          printf '  %s\n' "${APKS[@]}"
 
-      - name: Upload Android artifact
+          APK="$(find build/android -type f -name '*.apk' -printf '%s\t%p\n' | sort -nr | head -n1 | cut -f2-)"
+          [[ -n "$APK" ]]
+
+          DEST="dist/Qupil-${VERSION}-${COMMIT_SHORT}-Android-arm64.apk"
+          cp "$APK" "$DEST"
+          test -s "$DEST"
+          ls -lh "$DEST"
+
+      - name: Upload Android APK
         uses: actions/upload-artifact@v7
         with:
-          name: Qupil-Android-arm64
-          path: dist/*.apk
+          path: dist/Qupil-*-Android-arm64.apk
+          archive: false
           if-no-files-found: error
           retention-days: 14
-
 
   # ---------------------------------------------------------------------------
   # iOS SIMULATOR ARM64
@@ -506,9 +549,6 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 75
 
-    permissions:
-      contents: write
-
     env:
       QT_VERSION: "6.11.2"
       IOS_DEPLOYMENT_TARGET: "17.0"
@@ -524,7 +564,7 @@ jobs:
         run: |
           set -euo pipefail
           SOURCE_COMMIT="$(git rev-parse HEAD)"
-          SOURCE_COMMIT_SHORT="$(git rev-parse --short=12 HEAD)"
+          SOURCE_COMMIT_SHORT="$(git rev-parse --short=7 HEAD)"
           PROGRAM_VERSION="$(sed -nE 's/^[[:space:]]*project\(Qupil[[:space:]]+VERSION[[:space:]]+([0-9.]+).*/\1/p' CMakeLists.txt | head -n1)"
           [[ -n "$PROGRAM_VERSION" ]] || PROGRAM_VERSION="unknown"
           {
@@ -633,67 +673,40 @@ jobs:
           test -d "$APP"
           echo "Device app: $APP"
 
+          IPA_FILENAME="Qupil-${QUPIL_SOURCE_VERSION}-${QUPIL_SOURCE_COMMIT_SHORT}-iOS-arm64.ipa"
+          echo "QUPIL_IOS_IPA_FILENAME=$IPA_FILENAME" >> "$GITHUB_ENV"
+
           rm -rf dist Payload
           mkdir -p dist Payload
           /usr/bin/ditto "$APP" Payload/Qupil.app
-          /usr/bin/zip -qry dist/Qupil-ios-unsigned.ipa Payload
+          /usr/bin/zip -qry "dist/$IPA_FILENAME" Payload
           rm -rf Payload
 
-          test -s dist/Qupil-ios-unsigned.ipa
-          /usr/bin/unzip -Z1 dist/Qupil-ios-unsigned.ipa | grep -q '^Payload/Qupil.app/'
-          shasum -a 256 dist/Qupil-ios-unsigned.ipa > dist/SHA256SUMS
+          test -s "dist/$IPA_FILENAME"
+          /usr/bin/unzip -Z1 "dist/$IPA_FILENAME" | grep -q '^Payload/Qupil.app/'
+          shasum -a 256 "dist/$IPA_FILENAME"
+          ls -lh "dist/$IPA_FILENAME"
 
-          {
-            echo "Qupil: $QUPIL_SOURCE_VERSION"
-            echo "Source commit: $QUPIL_SOURCE_COMMIT"
-            echo "Qt: $QT_VERSION"
-            echo "Runner: macos-26"
-            xcodebuild -version
-            echo "iOS SDK: $(xcrun --sdk iphoneos --show-sdk-version)"
-            echo "Deployment target: $IOS_DEPLOYMENT_TARGET"
-          } > dist/BUILD-INFO.txt
+      - name: Upload iOS IPA
+        id: upload_ios
+        uses: actions/upload-artifact@v7
+        with:
+          path: dist/${{ env.QUPIL_IOS_IPA_FILENAME }}
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
 
-          ls -lh dist/Qupil-ios-unsigned.ipa
-          cat dist/SHA256SUMS
-
-      - name: Publish IPA as direct download
+      - name: Add iOS artifact link to summary
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ios-unsigned-latest
+          ARTIFACT_URL: ${{ steps.upload_ios.outputs.artifact-url }}
         run: |
           set -euo pipefail
-          IPA="$GITHUB_WORKSPACE/dist/Qupil-ios-unsigned.ipa"
-          test -s "$IPA"
-
-          NOTES_FILE="$RUNNER_TEMP/qupil-ios-release-notes.txt"
-          {
-            echo 'Automatisch erzeugter unsigned iOS/iPadOS Build von Qupil.'
-            echo
-            echo "Qupil: $QUPIL_SOURCE_VERSION"
-            echo "Commit: $QUPIL_SOURCE_COMMIT"
-            echo "Workflow Run: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-            echo
-            echo 'Die IPA ist fuer die Installation ueber SideStore vorgesehen.'
-          } > "$NOTES_FILE"
-
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release delete "$RELEASE_TAG" --cleanup-tag --yes
-          fi
-
-          gh release create "$RELEASE_TAG" "$IPA#Qupil-ios-unsigned.ipa" \
-            --target "$QUPIL_SOURCE_COMMIT" \
-            --title 'Qupil iOS unsigned - latest' \
-            --notes-file "$NOTES_FILE" \
-            --prerelease
-
-          DIRECT_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/Qupil-ios-unsigned.ipa"
           {
             echo '## Qupil iOS'
             echo
-            echo "[Qupil-ios-unsigned.ipa direkt herunterladen]($DIRECT_URL)"
-            echo
+            echo "Artifact: $QUPIL_IOS_IPA_FILENAME"
             echo "Commit: $QUPIL_SOURCE_COMMIT"
+            echo
+            echo "[IPA artifact herunterladen]($ARTIFACT_URL)"
           } >> "$GITHUB_STEP_SUMMARY"
-
-          echo "Direkter Download: $DIRECT_URL"

@@ -1,22 +1,27 @@
-# Mobile build status
+# CI build artifacts
 
-Qupil's mobile CI is consolidated in `.github/workflows/qupil-build-on-demand.yml`.
-Start **Qupil on-demand builds** manually in GitHub Actions and choose `android`, `ios`, or `all` (or another desktop target when needed). The selected `source_ref` is checked out and built directly.
+`Qupil on-demand builds` is the single GitHub Actions workflow for Windows, macOS, Android and iOS test packages.
 
-The project also keeps reproducible packaging/build scripts where they are useful locally:
+Each artifact is uploaded as the native single-file package for its platform. No GitHub Release is created just to download a CI build.
 
-- `scripts/build-android-release.sh` produces `dist/Qupil-android-arm64.apk` when used by the standalone/local packaging path.
-- `scripts/build-ios-unsigned.sh` produces `dist/Qupil-ios-unsigned.ipa` on macOS/Xcode when used by the standalone/local packaging path.
-- `.github/workflows/qupil-build-on-demand.yml` is the single GitHub Actions entry point for Windows, macOS, Android, and iOS builds and artifacts.
+File names include the Qupil version from `CMakeLists.txt` and the 7-character source commit, for example:
 
-The former `.github/workflows/mobile-build.yml` workflow was removed because it duplicated the Android/iOS CI path and had drifted from the maintained on-demand workflow.
+- `Qupil-1.5.28-b573a03-Windows-x64-Setup.exe`
+- `Qupil-1.5.28-b573a03-macOS-arm64.dmg`
+- `Qupil-1.5.28-b573a03-Android-arm64.apk`
+- `Qupil-1.5.28-b573a03-iOS-arm64.ipa`
+
+## Packaging
+
+- Windows: `windeployqt` collects Qt runtime files and Inno Setup creates one per-user installer EXE.
+- macOS: `macdeployqt` prepares the app bundle and `hdiutil` creates a compressed DMG with an Applications shortcut.
+- Android: the generated ARM64 APK is renamed to the version/commit build identity and uploaded directly.
+- iOS/iPadOS: the unsigned device app is packed as an IPA and uploaded directly as a workflow artifact.
 
 ## Signing
 
-The Android CI artifact is intended as a development/test package unless signing is configured separately.
-The iOS artifact is intentionally unsigned. A device-installable or App Store IPA requires an Apple Developer signing identity and provisioning profile.
+These CI packages are development/test builds. Windows and macOS packages are not code-signed/notarized by this workflow. Android signing is not configured here. The iOS IPA is intentionally unsigned for the existing sideload/test workflow.
 
 ## Local build host requirements
 
-Android requires Qt for Android, Android SDK/NDK and the JDK version expected by the active build path.
-iOS requires macOS, Xcode and a Qt iOS kit; Apple does not provide the iOS SDK/toolchain for Linux.
+Android requires Qt for Android, Android SDK/NDK and a compatible JDK. iOS requires macOS, Xcode and a Qt iOS kit; Apple does not provide the iOS SDK/toolchain for Linux.
