@@ -318,14 +318,15 @@ jobs:
           java-version: "17"
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+          log-accepted-android-sdk-licenses: false
 
       - name: Install Android SDK and NDK for Qt 6.10
         shell: bash
         run: |
           set -euxo pipefail
-
-          yes | sdkmanager --licenses >/dev/null || true
 
           sdkmanager \
             "platform-tools" \
