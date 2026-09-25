@@ -21,6 +21,7 @@ assert "Qt6::Quick" in cmake and "Qt6::QuickControls2" in cmake
 assert "Qt6::Sql" in cmake and "Qt6::Multimedia" in cmake
 assert "Qt6::QSQLiteDriverPlugin" in cmake, "QSQLITE plugin must be explicitly packaged"
 assert "INCLUDE_BY_TYPE sqldrivers" in cmake
+assert "EXCLUDE Qt6::QFFmpegMediaPlugin" in cmake, "Android must not deploy the Qt FFmpeg media plugin"
 # QUPIL_SOURCE_SANITY_DESKTOP_WIDGETS_V1
 # Qt Widgets is intentional for native desktop printing on Windows/macOS.
 # The CMake block must stay outside Android/iOS builds.
@@ -35,8 +36,8 @@ assert "Qt6::PrintSupport" in cmake, "desktop printing must use Qt PrintSupport 
 assert "Qt6::PrintSupport" in cmake, "desktop printing must use Qt PrintSupport without Qt Widgets"
 
 # The application may use Qt SQL's QSQLITE driver, but must not use/link the
-# sqlite3 C API directly. Audio must be Qt Multimedia only, with no SDL build
-# dependency left in either the migrated or reference application sources.
+# sqlite3 C API directly. Audio may use Qt Multimedia and native mobile APIs,
+# but no SDL build dependency may remain in migrated/reference sources.
 source_files = list((ROOT / "src").rglob("*.cpp")) + list((ROOT / "src").rglob("*.h"))
 all_source = "\n".join(p.read_text(encoding="utf-8", errors="ignore") for p in source_files)
 assert "sqlite3.h" not in all_source and not re.search(r"\bsqlite3_", all_source)
@@ -175,7 +176,12 @@ assert 'nativeReminderDiagnostics: App.nativeReminderDiagnostics' in settings_qm
 assert 'iOS background notification test' in settings_form
 assert 'lesson-end.wav' in cmake and 'reminder.wav' in cmake
 metronome_h = (ROOT / "src/app/metronomecontroller.h").read_text(encoding="utf-8")
+metronome_cpp = (ROOT / "src/app/metronomecontroller.cpp").read_text(encoding="utf-8")
+android_sound_player = (ROOT / "android/src/org/qupil/app/QupilSoundPlayer.java").read_text(encoding="utf-8")
 assert "QMediaPlayer m_notificationCustom" in metronome_h and "QMediaPlayer m_lessonEndCustom" in metronome_h
+assert "#if !defined(Q_OS_ANDROID)" in metronome_h
+assert "QupilSoundPlayer" in metronome_cpp and "playAndroidReminderSound" in metronome_cpp
+assert "android.media.MediaPlayer" in android_sound_player and "R.raw.lesson_end" in android_sound_player
 assert "QSoundEffect m_notification" in metronome_h and "QSoundEffect m_lessonEnd" in metronome_h
 for legacy_key, current_key in (
     ("MsgSoundFilePath", "lessonEndSoundPath"),

@@ -2,11 +2,15 @@
 #pragma once
 
 #include <QObject>
-#include <QAudioOutput>
 #include <QElapsedTimer>
-#include <QMediaPlayer>
 #include <QSoundEffect>
 #include <QTimer>
+#include <QtGlobal>
+
+#if !defined(Q_OS_ANDROID)
+#include <QAudioOutput>
+#include <QMediaPlayer>
+#endif
 
 class MetronomeController final : public QObject
 {
@@ -53,12 +57,14 @@ private:
     QSoundEffect m_accent;
     QSoundEffect m_tuning;
     QSoundEffect m_notification;
+    QSoundEffect m_lessonEnd;
+#if !defined(Q_OS_ANDROID)
     QMediaPlayer m_notificationCustom;
     QAudioOutput m_notificationOutput;
-    QSoundEffect m_lessonEnd;
     QMediaPlayer m_lessonEndCustom;
     QAudioOutput m_lessonEndOutput;
     QMediaPlayer m_preview;
     QAudioOutput m_previewOutput;
+#endif
     QElapsedTimer m_tapTimer;
 };

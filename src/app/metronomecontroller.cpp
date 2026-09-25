@@ -6,6 +6,10 @@
 #include <QUrl>
 #include <QtGlobal>
 
+#if defined(Q_OS_ANDROID)
+#include <QJniObject>
+#endif
+
 MetronomeController::MetronomeController(QObject *parent)
     : QObject(parent)
 {
@@ -17,15 +21,19 @@ MetronomeController::MetronomeController(QObject *parent)
     m_notification.setSource(QUrl(QStringLiteral("qrc:/qt/qml/Qupil/data/sounds/reminder.wav")));
     m_notification.setVolume(0.7f);
     m_notification.setLoopCount(1);
+#if !defined(Q_OS_ANDROID)
     m_notificationCustom.setAudioOutput(&m_notificationOutput);
     m_notificationOutput.setVolume(0.7f);
+#endif
     m_lessonEnd.setSource(QUrl(QStringLiteral("qrc:/qt/qml/Qupil/data/sounds/lesson-end.wav")));
     m_lessonEnd.setVolume(0.7f);
     m_lessonEnd.setLoopCount(1);
+#if !defined(Q_OS_ANDROID)
     m_lessonEndCustom.setAudioOutput(&m_lessonEndOutput);
     m_lessonEndOutput.setVolume(0.7f);
     m_preview.setAudioOutput(&m_previewOutput);
     m_previewOutput.setVolume(0.7f);
+#endif
     m_timer.setTimerType(Qt::PreciseTimer);
     connect(&m_timer, &QTimer::timeout, this, &MetronomeController::tick);
 }
@@ -106,6 +114,24 @@ float reminderSoundVolume(const QString &settingKey)
     return float(qBound(0, QSettings().value(QStringLiteral("settings/") + settingKey, 7).toInt(), 10)) / 10.0f;
 }
 
+#if defined(Q_OS_ANDROID)
+void playAndroidReminderSound(const QString &profile, const QString &path, int volume)
+{
+    const QJniObject context = QNativeInterface::QAndroidApplication::context();
+    if (!context.isValid())
+        return;
+    const QJniObject jProfile = QJniObject::fromString(profile);
+    const QJniObject jPath = QJniObject::fromString(path);
+    QJniObject::callStaticMethod<void>(
+        "org/qupil/app/QupilSoundPlayer",
+        "play",
+        "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;I)V",
+        context.object<jobject>(),
+        jProfile.object<jstring>(),
+        jPath.object<jstring>(),
+        jint(qBound(0, volume, 10)));
+}
+#else
 void playCustom(QMediaPlayer &player, QAudioOutput &output, const QString &path, float volume)
 {
     const QUrl source = QUrl::fromLocalFile(path);
@@ -130,24 +156,40 @@ void playConfigured(QSoundEffect &fallback, QMediaPlayer &custom, QAudioOutput &
     fallback.setVolume(volume);
     fallback.play();
 }
+#endif
 }
 
 void MetronomeController::playNotificationSound()
 {
+#if defined(Q_OS_ANDROID)
+    playAndroidReminderSound(QStringLiteral("reminder"),
+                             reminderSoundPath(QStringLiteral("reminderSoundPath")),
+                             qRound(reminderSoundVolume(QStringLiteral("reminderSoundVolume")) * 10.0f));
+#else
     playConfigured(m_notification, m_notificationCustom, m_notificationOutput,
                    reminderSoundPath(QStringLiteral("reminderSoundPath")),
                    reminderSoundVolume(QStringLiteral("reminderSoundVolume")));
+#endif
 }
 
 void MetronomeController::playLessonEndSound()
 {
+#if defined(Q_OS_ANDROID)
+    playAndroidReminderSound(QStringLiteral("lessonEnd"),
+                             reminderSoundPath(QStringLiteral("lessonEndSoundPath")),
+                             qRound(reminderSoundVolume(QStringLiteral("lessonEndSoundVolume")) * 10.0f));
+#else
     playConfigured(m_lessonEnd, m_lessonEndCustom, m_lessonEndOutput,
                    reminderSoundPath(QStringLiteral("lessonEndSoundPath")),
                    reminderSoundVolume(QStringLiteral("lessonEndSoundVolume")));
+#endif
 }
 
 void MetronomeController::previewReminderSound(const QString &profile, const QString &path, int volume)
 {
+#if defined(Q_OS_ANDROID)
+    playAndroidReminderSound(profile, path, volume);
+#else
     const float gain = float(qBound(0, volume, 10)) / 10.0f;
     if (!path.isEmpty() && QFileInfo::exists(path)) {
         m_notification.stop();
@@ -160,6 +202,7 @@ void MetronomeController::previewReminderSound(const QString &profile, const QSt
     fallback.stop();
     fallback.setVolume(gain);
     fallback.play();
+#endif
 }
 
 void MetronomeController::playTuningTone(const QString &tone, int pitch)

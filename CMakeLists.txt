@@ -195,9 +195,19 @@ target_link_libraries(qupil PRIVATE
 if(NOT TARGET Qt6::QSQLiteDriverPlugin)
     message(FATAL_ERROR "Qt was installed without the QSQLITE driver plugin")
 endif()
-qt_import_plugins(qupil
-    INCLUDE_BY_TYPE sqldrivers Qt6::QSQLiteDriverPlugin
-)
+# Android only needs the Qt Multimedia core APIs used by QSoundEffect.  The
+# foreground custom reminder sounds are played by Android MediaPlayer, so the
+# FFmpeg media backend must not be deployed into the APK.
+if(ANDROID AND TARGET Qt6::QFFmpegMediaPlugin)
+    qt_import_plugins(qupil
+        INCLUDE_BY_TYPE sqldrivers Qt6::QSQLiteDriverPlugin
+        EXCLUDE Qt6::QFFmpegMediaPlugin
+    )
+else()
+    qt_import_plugins(qupil
+        INCLUDE_BY_TYPE sqldrivers Qt6::QSQLiteDriverPlugin
+    )
+endif()
 
 # Qupil iOS: Qt Multimedia FFmpeg frameworks
 # Official Qt iOS binary packages with Multimedia include an FFmpeg backend.

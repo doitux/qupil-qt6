@@ -306,7 +306,7 @@ jobs:
 
           dumpbin /dependents (Join-Path $dist "qupil.exe") | Select-Object -First 200
 
-          {
+          @(
             "### Windows package audit"
             ""
             "- Staged runtime: $([math]::Round($totalBytes / 1MB, 2)) MiB"
@@ -315,7 +315,7 @@ jobs:
             "- SQL drivers: $($sqlDrivers.Name -join ', ')"
             "- FFmpeg-related files: $($ffmpeg.Count)"
             "- Legacy external data directory copied: no"
-          } | Add-Content -Path $env:GITHUB_STEP_SUMMARY
+          ) | Add-Content -Path $env:GITHUB_STEP_SUMMARY
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v7
@@ -654,14 +654,21 @@ jobs:
 
           UNCOMPRESSED_BYTES="$(unzip -l "$APK" | awk 'NR > 3 && $1 ~ /^[0-9]+$/ { total += $1 } END { print total + 0 }')"
           FFMPEG_COUNT="$(unzip -Z1 "$APK" | grep -Eic '(avcodec|avformat|avutil|swresample|swscale|ffmpeg)' || true)"
+          FFMPEG_BYTES="$(unzip -l "$APK" | awk 'NR > 3 && $1 ~ /^[0-9]+$/ && tolower($4) ~ /(avcodec|avformat|avutil|swresample|swscale|ffmpeg)/ { total += $1 } END { print total + 0 }')"
           {
             echo '### Android package audit'
             echo
             echo "- APK: $(du -sh "$APK" | awk '{print $1}')"
             echo "- Uncompressed members: $((UNCOMPRESSED_BYTES / 1024 / 1024)) MiB"
-            echo "- FFmpeg-related members: $FFMPEG_COUNT"
-            echo '- Build type is unchanged in Package Diet v1 (currently measured, not optimized).'
+            echo "- FFmpeg-related members: $FFMPEG_COUNT ($((FFMPEG_BYTES / 1024 / 1024)) MiB uncompressed)"
+            echo '- Qt FFmpeg media plugin excluded: yes'
+            echo '- Build type is still Debug; Release/signing is a separate Package Diet step.'
           } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$FFMPEG_COUNT" != "0" ]]; then
+              echo "Package Diet v2 expected zero FFmpeg members in the Android APK, found $FFMPEG_COUNT." >&2
+              exit 1
+          fi
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v7
@@ -852,13 +859,15 @@ jobs:
 
           UNCOMPRESSED_BYTES="$(unzip -l "$IPA" | awk 'NR > 3 && $1 ~ /^[0-9]+$/ { total += $1 } END { print total + 0 }')"
           FFMPEG_COUNT="$(unzip -Z1 "$IPA" | grep -Eic '(avcodec|avformat|avutil|swresample|swscale|ffmpeg)' || true)"
+          FFMPEG_BYTES="$(unzip -l "$IPA" | awk 'NR > 3 && $1 ~ /^[0-9]+$/ && tolower($4) ~ /(avcodec|avformat|avutil|swresample|swscale|ffmpeg)/ { total += $1 } END { print total + 0 }')"
           {
             echo '### iOS package audit'
             echo
             echo "- IPA: $(du -sh "$IPA" | awk '{print $1}')"
             echo "- Uncompressed members: $((UNCOMPRESSED_BYTES / 1024 / 1024)) MiB"
-            echo "- FFmpeg-related members: $FFMPEG_COUNT"
-            echo '- FFmpeg integration is unchanged in Package Diet v1 (measured, not optimized).'
+            echo "- FFmpeg-related members: $FFMPEG_COUNT ($((FFMPEG_BYTES / 1024 / 1024)) MiB uncompressed)"
+            echo '- Stock Qt 6.11 iOS Multimedia requires its FFmpeg libraries at link time.'
+            echo '- iOS FFmpeg removal therefore needs a separate native-audio/custom-Qt change; v2 does not strip required frameworks.'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload iOS IPA
