@@ -180,6 +180,7 @@ metronome_cpp = (ROOT / "src/app/metronomecontroller.cpp").read_text(encoding="u
 android_sound_player = (ROOT / "android/src/org/qupil/app/QupilSoundPlayer.java").read_text(encoding="utf-8")
 assert "QMediaPlayer m_notificationCustom" in metronome_h and "QMediaPlayer m_lessonEndCustom" in metronome_h
 assert "#if !defined(Q_OS_ANDROID)" in metronome_h
+assert "#include <QNativeInterface>" in metronome_cpp, "Android JNI bridge must include the QNativeInterface declaration"
 assert "QupilSoundPlayer" in metronome_cpp and "playAndroidReminderSound" in metronome_cpp
 assert "android.media.MediaPlayer" in android_sound_player and "R.raw.lesson_end" in android_sound_player
 assert "QSoundEffect m_notification" in metronome_h and "QSoundEffect m_lessonEnd" in metronome_h

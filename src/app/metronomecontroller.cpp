@@ -8,6 +8,7 @@
 
 #if defined(Q_OS_ANDROID)
 #include <QJniObject>
+#include <QNativeInterface>
 #endif
 
 MetronomeController::MetronomeController(QObject *parent)
