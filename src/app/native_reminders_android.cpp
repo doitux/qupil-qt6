@@ -5,6 +5,7 @@
 #include <QJniObject>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QVariant>
 
 bool qupilSyncNativeReminders(const QVariantList &schedule,
                               const QString &lessonEndSoundPath,
@@ -14,25 +15,30 @@ bool qupilSyncNativeReminders(const QVariantList &schedule,
                               QString *errorMessage)
 {
     Q_UNUSED(errorMessage)
-    const QJniObject context = QNativeInterface::QAndroidApplication::context();
-    if (!context.isValid())
-        return false;
+    const QString scheduleJson = QString::fromUtf8(
+        QJsonDocument(QJsonArray::fromVariantList(schedule)).toJson(QJsonDocument::Compact));
 
-    const QByteArray json = QJsonDocument(QJsonArray::fromVariantList(schedule)).toJson(QJsonDocument::Compact);
-    const QJniObject jJson = QJniObject::fromString(QString::fromUtf8(json));
-    const QJniObject jLessonSound = QJniObject::fromString(lessonEndSoundPath);
-    const QJniObject jReminderSound = QJniObject::fromString(reminderSoundPath);
+    QNativeInterface::QAndroidApplication::runOnAndroidMainThread(
+        [scheduleJson, lessonEndSoundPath, lessonEndVolume, reminderSoundPath, reminderVolume]() {
+            const QJniObject context = QNativeInterface::QAndroidApplication::context();
+            if (!context.isValid())
+                return QVariant(false);
 
-    QJniObject::callStaticMethod<void>(
-        "org/qupil/app/QupilReminderScheduler",
-        "sync",
-        "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;I)V",
-        context.object<jobject>(),
-        jJson.object<jstring>(),
-        jLessonSound.object<jstring>(),
-        jint(lessonEndVolume),
-        jReminderSound.object<jstring>(),
-        jint(reminderVolume));
+            const QJniObject jJson = QJniObject::fromString(scheduleJson);
+            const QJniObject jLessonSound = QJniObject::fromString(lessonEndSoundPath);
+            const QJniObject jReminderSound = QJniObject::fromString(reminderSoundPath);
+            QJniObject::callStaticMethod<void>(
+                "org/qupil/app/QupilReminderScheduler",
+                "sync",
+                "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;I)V",
+                context.object<jobject>(),
+                jJson.object<jstring>(),
+                jLessonSound.object<jstring>(),
+                jint(lessonEndVolume),
+                jReminderSound.object<jstring>(),
+                jint(reminderVolume));
+            return QVariant(true);
+        });
     return true;
 }
 
@@ -50,14 +56,17 @@ bool qupilExactAlarmPermissionGranted()
 
 void qupilRequestExactAlarmPermission()
 {
-    const QJniObject context = QNativeInterface::QAndroidApplication::context();
-    if (!context.isValid())
-        return;
-    QJniObject::callStaticMethod<void>(
-        "org/qupil/app/QupilReminderScheduler",
-        "requestExactAlarmPermission",
-        "(Landroid/content/Context;)V",
-        context.object<jobject>());
+    QNativeInterface::QAndroidApplication::runOnAndroidMainThread([]() {
+        const QJniObject context = QNativeInterface::QAndroidApplication::context();
+        if (!context.isValid())
+            return QVariant(false);
+        QJniObject::callStaticMethod<void>(
+            "org/qupil/app/QupilReminderScheduler",
+            "requestExactAlarmPermission",
+            "(Landroid/content/Context;)V",
+            context.object<jobject>());
+        return QVariant(true);
+    });
 }
 
 

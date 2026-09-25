@@ -7,8 +7,9 @@
 #include <QtGlobal>
 
 #if defined(Q_OS_ANDROID)
+#include <QCoreApplication>
 #include <QJniObject>
-#include <QNativeInterface>
+#include <QVariant>
 #endif
 
 MetronomeController::MetronomeController(QObject *parent)
@@ -118,19 +119,24 @@ float reminderSoundVolume(const QString &settingKey)
 #if defined(Q_OS_ANDROID)
 void playAndroidReminderSound(const QString &profile, const QString &path, int volume)
 {
-    const QJniObject context = QNativeInterface::QAndroidApplication::context();
-    if (!context.isValid())
-        return;
-    const QJniObject jProfile = QJniObject::fromString(profile);
-    const QJniObject jPath = QJniObject::fromString(path);
-    QJniObject::callStaticMethod<void>(
-        "org/qupil/app/QupilSoundPlayer",
-        "play",
-        "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;I)V",
-        context.object<jobject>(),
-        jProfile.object<jstring>(),
-        jPath.object<jstring>(),
-        jint(qBound(0, volume, 10)));
+    const int clampedVolume = qBound(0, volume, 10);
+    QNativeInterface::QAndroidApplication::runOnAndroidMainThread(
+        [profile, path, clampedVolume]() {
+            const QJniObject context = QNativeInterface::QAndroidApplication::context();
+            if (!context.isValid())
+                return QVariant(false);
+            const QJniObject jProfile = QJniObject::fromString(profile);
+            const QJniObject jPath = QJniObject::fromString(path);
+            QJniObject::callStaticMethod<void>(
+                "org/qupil/app/QupilSoundPlayer",
+                "play",
+                "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;I)V",
+                context.object<jobject>(),
+                jProfile.object<jstring>(),
+                jPath.object<jstring>(),
+                jint(clampedVolume));
+            return QVariant(true);
+        });
 }
 #else
 void playCustom(QMediaPlayer &player, QAudioOutput &output, const QString &path, float volume)
