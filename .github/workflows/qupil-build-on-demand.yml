@@ -221,9 +221,25 @@ jobs:
             throw "windeployqt failed with exit code $LASTEXITCODE"
           }
 
-          if (Test-Path "data") {
-            Copy-Item "data" (Join-Path $dist "data") -Recurse -Force
+          # QUPIL_PACKAGE_DIET_V1_WINDOWS_SQLITE_ONLY
+          # Qupil supports SQLite only; remove SQL drivers copied by
+          # windeployqt that the application can never use.
+          $sqlDriverDir = Join-Path $dist "sqldrivers"
+          $qsqlite = Join-Path $sqlDriverDir "qsqlite.dll"
+          if (-not (Test-Path $qsqlite)) {
+            throw "Required SQLite driver was not deployed: $qsqlite"
           }
+
+          Get-ChildItem $sqlDriverDir -File -Filter "qsql*.dll" |
+            Where-Object { $_.Name -ne "qsqlite.dll" } |
+            Remove-Item -Force
+
+          $unexpectedSqlDrivers = Get-ChildItem $sqlDriverDir -File -Filter "qsql*.dll" |
+            Where-Object { $_.Name -ne "qsqlite.dll" }
+          if ($unexpectedSqlDrivers) {
+            throw "Unexpected SQL drivers remain in the Windows package: $($unexpectedSqlDrivers.Name -join ', ')"
+          }
+
 
           $isccCommand = Get-Command "ISCC.exe" -ErrorAction SilentlyContinue
           if ($isccCommand) {
@@ -260,6 +276,46 @@ jobs:
           }
 
           Get-Item $installer | Format-List FullName, Length
+
+      - name: Audit Windows package size
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $dist = Join-Path $env:GITHUB_WORKSPACE "dist\Qupil-Windows-x64"
+          $installer = Get-ChildItem (Join-Path $env:GITHUB_WORKSPACE "dist") -File -Filter "Qupil-*-Windows-x64-Setup.exe" |
+            Select-Object -First 1
+          if (-not (Test-Path $dist)) { throw "Windows staging directory missing: $dist" }
+          if (-not $installer) { throw "Windows installer missing for package audit" }
+
+          $files = @(Get-ChildItem $dist -Recurse -File)
+          $totalBytes = ($files | Measure-Object Length -Sum).Sum
+          if ($null -eq $totalBytes) { $totalBytes = 0 }
+          $qtDlls = @($files | Where-Object { $_.Name -like 'Qt6*.dll' })
+          $ffmpeg = @($files | Where-Object { $_.Name -match '(?i)(avcodec|avformat|avutil|swresample|swscale|ffmpeg)' })
+          $sqlDrivers = @($files | Where-Object { $_.FullName -match '[\\/]sqldrivers[\\/]' })
+
+          Write-Host "Windows staged package: $([math]::Round($totalBytes / 1MB, 2)) MiB"
+          Write-Host "Installer: $([math]::Round($installer.Length / 1MB, 2)) MiB"
+          Write-Host "Qt DLL count: $($qtDlls.Count)"
+          Write-Host "SQL drivers: $($sqlDrivers.Name -join ', ')"
+          Write-Host "FFmpeg-related files: $($ffmpeg.Count)"
+          Write-Host "Top 20 staged files:"
+          $files | Sort-Object Length -Descending | Select-Object -First 20 |
+            ForEach-Object { '{0,10:N2} MiB  {1}' -f ($_.Length / 1MB), $_.FullName.Substring($dist.Length + 1) }
+
+          dumpbin /dependents (Join-Path $dist "qupil.exe") | Select-Object -First 200
+
+          {
+            "### Windows package audit"
+            ""
+            "- Staged runtime: $([math]::Round($totalBytes / 1MB, 2)) MiB"
+            "- Installer: $([math]::Round($installer.Length / 1MB, 2)) MiB"
+            "- Qt DLLs: $($qtDlls.Count)"
+            "- SQL drivers: $($sqlDrivers.Name -join ', ')"
+            "- FFmpeg-related files: $($ffmpeg.Count)"
+            "- Legacy external data directory copied: no"
+          } | Add-Content -Path $env:GITHUB_STEP_SUMMARY
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v7
@@ -355,24 +411,90 @@ jobs:
           fi
 
           echo "Found app: $APP"
-          "$QT_ROOT_DIR/bin/macdeployqt" "$APP"
 
-          cp -R "$APP" dist/dmg-root/Qupil.app
-          if [[ -d data ]]; then
-              cp -R data dist/dmg-root/data
-          fi
+          # QUPIL_PACKAGE_DIET_V1_MAC_SQLITE_ONLY
+          # Qupil supports SQLite only. macdeployqt scans all SQL drivers in
+          # the Qt installation, so prune the ephemeral CI Qt tree first.
+          SQL_DRIVER_DIR="$QT_ROOT_DIR/plugins/sqldrivers"
+          test -d "$SQL_DRIVER_DIR"
+          test -f "$SQL_DRIVER_DIR/libqsqlite.dylib"
+
+          echo "Qt SQL drivers before pruning:"
+          find "$SQL_DRIVER_DIR" -maxdepth 1 -type f -name 'libqsql*.dylib' -print | sort
+          find "$SQL_DRIVER_DIR" -maxdepth 1 -type f \
+            -name 'libqsql*.dylib' ! -name 'libqsqlite.dylib' -delete
+
+          test "$(find "$SQL_DRIVER_DIR" -maxdepth 1 -type f -name 'libqsql*.dylib' | wc -l | tr -d ' ')" -eq 1
+          "$QT_ROOT_DIR/bin/macdeployqt" "$APP" -verbose=2
+
+          test -f "$APP/Contents/PlugIns/sqldrivers/libqsqlite.dylib"
+          test ! -e "$APP/Contents/PlugIns/sqldrivers/libqsqlpsql.dylib"
+
+          ditto "$APP" dist/dmg-root/Qupil.app
           ln -s /Applications dist/dmg-root/Applications
 
-          hdiutil create \
-            -volname "Qupil ${VERSION}" \
-            -srcfolder dist/dmg-root \
-            -ov \
-            -format UDZO \
-            "$DMG"
+          VOLNAME="Qupil ${VERSION} ${COMMIT_SHORT}"
+          TMP_DMG="$RUNNER_TEMP/$(basename "$DMG")"
+          rm -f "$TMP_DMG" "$DMG"
+          hdiutil detach -force "/Volumes/$VOLNAME" >/dev/null 2>&1 || true
+
+          DMG_CREATED=0
+          for attempt in 1 2 3; do
+              if hdiutil create \
+                -volname "$VOLNAME" \
+                -srcfolder dist/dmg-root \
+                -ov \
+                -format UDZO \
+                "$TMP_DMG"; then
+                  DMG_CREATED=1
+                  break
+              fi
+
+              echo "hdiutil create attempt $attempt failed; cleaning up before retry" >&2
+              hdiutil info || true
+              hdiutil detach -force "/Volumes/$VOLNAME" >/dev/null 2>&1 || true
+              rm -f "$TMP_DMG"
+              sleep $((attempt * 2))
+          done
+
+          test "$DMG_CREATED" -eq 1
+          test -s "$TMP_DMG"
+          mv "$TMP_DMG" "$DMG"
 
           test -s "$DMG"
           hdiutil verify "$DMG"
           ls -lh "$DMG"
+
+      - name: Audit macOS package size
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APP="dist/dmg-root/Qupil.app"
+          DMG="$(find dist -maxdepth 1 -type f -name 'Qupil-*-macOS-arm64.dmg' -print -quit)"
+          test -d "$APP"
+          test -s "$DMG"
+
+          echo "macOS app bundle: $(du -sh "$APP" | awk '{print $1}')"
+          echo "macOS DMG:        $(du -sh "$DMG" | awk '{print $1}')"
+          echo "Top 20 app-bundle files:"
+          find "$APP" -type f -exec stat -f '%z %N' {} + | sort -nr | head -20
+          echo "Bundled frameworks:"
+          find "$APP/Contents/Frameworks" -maxdepth 1 -type d -name '*.framework' -print 2>/dev/null | sort || true
+          echo "Bundled plugins:"
+          find "$APP/Contents/PlugIns" -type f -print 2>/dev/null | sort || true
+          echo "FFmpeg-related files:"
+          find "$APP" -type f -print | grep -Ei '/(avcodec|avformat|avutil|swresample|swscale|ffmpeg)' || true
+
+          {
+            echo '### macOS package audit'
+            echo
+            echo "- App bundle: $(du -sh "$APP" | awk '{print $1}')"
+            echo "- DMG: $(du -sh "$DMG" | awk '{print $1}')"
+            echo "- SQL drivers: $(find "$APP/Contents/PlugIns/sqldrivers" -maxdepth 1 -type f -name 'libqsql*.dylib' -exec basename {} \; 2>/dev/null | paste -sd ', ' -)"
+            echo "- FFmpeg-related files: $(find "$APP" -type f -print | grep -Eic '/(avcodec|avformat|avutil|swresample|swscale|ffmpeg)' || true)"
+            echo '- Legacy external data directory copied: no'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload macOS DMG
         uses: actions/upload-artifact@v7
@@ -514,6 +636,32 @@ jobs:
           cp "$APK" "$DEST"
           test -s "$DEST"
           ls -lh "$DEST"
+
+      - name: Audit Android package size
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APK="$(find dist -maxdepth 1 -type f -name 'Qupil-*-Android-arm64.apk' -print -quit)"
+          test -s "$APK"
+          echo "APK: $(du -sh "$APK" | awk '{print $1}')"
+          echo "Top 20 APK members by uncompressed size:"
+          unzip -l "$APK" | awk 'NR > 3 && $1 ~ /^[0-9]+$/ { print $1 "\t" $4 }' | sort -nr | head -20
+          echo "Native libraries:"
+          unzip -Z1 "$APK" | grep '^lib/' | sort || true
+          echo "FFmpeg-related APK members:"
+          unzip -Z1 "$APK" | grep -Ei '(avcodec|avformat|avutil|swresample|swscale|ffmpeg)' || true
+
+          UNCOMPRESSED_BYTES="$(unzip -l "$APK" | awk 'NR > 3 && $1 ~ /^[0-9]+$/ { total += $1 } END { print total + 0 }')"
+          FFMPEG_COUNT="$(unzip -Z1 "$APK" | grep -Eic '(avcodec|avformat|avutil|swresample|swscale|ffmpeg)' || true)"
+          {
+            echo '### Android package audit'
+            echo
+            echo "- APK: $(du -sh "$APK" | awk '{print $1}')"
+            echo "- Uncompressed members: $((UNCOMPRESSED_BYTES / 1024 / 1024)) MiB"
+            echo "- FFmpeg-related members: $FFMPEG_COUNT"
+            echo '- Build type is unchanged in Package Diet v1 (currently measured, not optimized).'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v7
@@ -686,6 +834,32 @@ jobs:
           /usr/bin/unzip -Z1 "dist/$IPA_FILENAME" | grep -q '^Payload/Qupil.app/'
           shasum -a 256 "dist/$IPA_FILENAME"
           ls -lh "dist/$IPA_FILENAME"
+
+      - name: Audit iOS package size
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          IPA="dist/$QUPIL_IOS_IPA_FILENAME"
+          test -s "$IPA"
+          echo "IPA: $(du -sh "$IPA" | awk '{print $1}')"
+          echo "Top 20 IPA members by uncompressed size:"
+          unzip -l "$IPA" | awk 'NR > 3 && $1 ~ /^[0-9]+$/ { print $1 "\t" $4 }' | sort -nr | head -20
+          echo "Bundled frameworks:"
+          unzip -Z1 "$IPA" | grep '/Frameworks/' | sed -E 's#(Payload/[^/]+/Frameworks/[^/]+).*#\1#' | sort -u || true
+          echo "FFmpeg-related IPA members:"
+          unzip -Z1 "$IPA" | grep -Ei '(avcodec|avformat|avutil|swresample|swscale|ffmpeg)' || true
+
+          UNCOMPRESSED_BYTES="$(unzip -l "$IPA" | awk 'NR > 3 && $1 ~ /^[0-9]+$/ { total += $1 } END { print total + 0 }')"
+          FFMPEG_COUNT="$(unzip -Z1 "$IPA" | grep -Eic '(avcodec|avformat|avutil|swresample|swscale|ffmpeg)' || true)"
+          {
+            echo '### iOS package audit'
+            echo
+            echo "- IPA: $(du -sh "$IPA" | awk '{print $1}')"
+            echo "- Uncompressed members: $((UNCOMPRESSED_BYTES / 1024 / 1024)) MiB"
+            echo "- FFmpeg-related members: $FFMPEG_COUNT"
+            echo '- FFmpeg integration is unchanged in Package Diet v1 (measured, not optimized).'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload iOS IPA
         id: upload_ios
