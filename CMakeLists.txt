@@ -218,7 +218,11 @@ if(IOS)
             "Qupil iOS requires Qt >= 6.8 for qt_add_ios_ffmpeg_libraries() "
             "when using the prebuilt Qt Multimedia package")
     endif()
-    set(QT_NO_FFMPEG_XCODE_EMBED_FRAMEWORKS_CODE_SIGN_ON_COPY ON)
+    option(QUPIL_IOS_DISABLE_FFMPEG_CODE_SIGN_ON_COPY
+        "Disable signing of embedded FFmpeg frameworks for unsigned iOS packages" ON)
+    if(QUPIL_IOS_DISABLE_FFMPEG_CODE_SIGN_ON_COPY)
+        set(QT_NO_FFMPEG_XCODE_EMBED_FRAMEWORKS_CODE_SIGN_ON_COPY ON)
+    endif()
     qt_add_ios_ffmpeg_libraries(qupil)
 endif()
 
@@ -242,6 +246,15 @@ add_custom_target(qupil_build_info ALL
 )
 add_dependencies(qupil qupil_build_info)
 target_include_directories(qupil PRIVATE "${QUPIL_GENERATED_DIR}")
+
+# Optional CI-provided iOS build number for App Store Connect/TestFlight.
+# Normal local/SideStore builds keep the project version as the fallback.
+set(QUPIL_IOS_BUILD_NUMBER "${PROJECT_VERSION}" CACHE STRING
+    "Numeric CFBundleVersion used for iOS distribution builds")
+if(IOS AND NOT QUPIL_IOS_BUILD_NUMBER MATCHES "^[0-9]+([.][0-9]+)?([.][0-9]+)?$")
+    message(FATAL_ERROR
+        "QUPIL_IOS_BUILD_NUMBER must contain one to three dot-separated integers")
+endif()
 
 set_target_properties(qupil PROPERTIES
     WIN32_EXECUTABLE TRUE
@@ -272,6 +285,10 @@ if(IOS)
     set_target_properties(qupil PROPERTIES
         XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "org.qupil.app"
         XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${QUPIL_IOS_BUILD_NUMBER}"
+        XCODE_ATTRIBUTE_CURRENT_PROJECT_VERSION "${QUPIL_IOS_BUILD_NUMBER}"
+        XCODE_ATTRIBUTE_MARKETING_VERSION "${PROJECT_VERSION}"
+        XCODE_ATTRIBUTE_SKIP_INSTALL "NO"
     )
 endif()
 

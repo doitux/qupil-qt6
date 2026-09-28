@@ -1,5 +1,6 @@
 # QUPIL_CI_MANAGED
 # QUPIL_NATIVE_ARTIFACTS_V1
+# QUPIL_TESTFLIGHT_V1
 #
 # Qupil Cross-Platform CI
 # Linux wird absichtlich lokal mit Qt Creator gebaut.
@@ -22,6 +23,7 @@ on:
           - macos
           - android
           - ios
+          - ios-testflight
 
       source_ref:
         description: "Branch, Tag oder Commit mit dem zu bauenden Qupil-Stand"
@@ -893,3 +895,577 @@ jobs:
             echo
             echo "[IPA artifact herunterladen]($ARTIFACT_URL)"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # iOS / iPadOS TESTFLIGHT DISTRIBUTION
+  #
+  # Deliberately separate from the unsigned SideStore job. This job only runs
+  # when target=ios-testflight is selected, so "all" can never upload a build
+  # to App Store Connect by accident.
+  # ---------------------------------------------------------------------------
+  ios_testflight:
+    name: iOS/iPadOS TestFlight upload
+    if: ${{ inputs.target == 'ios-testflight' }}
+    runs-on: macos-26
+    timeout-minutes: 90
+
+    env:
+      QT_VERSION: "6.11.2"
+      IOS_DEPLOYMENT_TARGET: "17.0"
+      QUPIL_IOS_BUNDLE_ID: "org.qupil.app"
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+    steps:
+      - name: Checkout committed Qupil source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref }}
+
+      - name: Verify TestFlight secrets
+        shell: bash
+        env:
+          IOS_DISTRIBUTION_CERTIFICATE_P12_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_P12_BASE64 }}
+          IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          IOS_APP_STORE_PROFILE_BASE64: ${{ secrets.IOS_APP_STORE_PROFILE_BASE64 }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8_BASE64 }}
+        run: |
+          set -euo pipefail
+
+          missing=()
+          for name in \
+            APPLE_TEAM_ID \
+            IOS_DISTRIBUTION_CERTIFICATE_P12_BASE64 \
+            IOS_DISTRIBUTION_CERTIFICATE_PASSWORD \
+            IOS_APP_STORE_PROFILE_BASE64 \
+            APP_STORE_CONNECT_KEY_ID \
+            APP_STORE_CONNECT_ISSUER_ID \
+            APP_STORE_CONNECT_API_KEY_P8_BASE64; do
+              if [[ -z "${!name:-}" ]]; then
+                missing+=("$name")
+              fi
+          done
+
+          if ((${#missing[@]})); then
+            printf '::error::Missing TestFlight repository secrets: %s\n' "${missing[*]}"
+            echo 'See docs/TESTFLIGHT_GITHUB.md for the one-time Apple/GitHub setup.'
+            exit 1
+          fi
+
+          [[ "$APPLE_TEAM_ID" =~ ^[A-Z0-9]{10}$ ]] || {
+            echo '::error::APPLE_TEAM_ID must be the 10-character Apple Developer Team ID.'
+            exit 1
+          }
+
+      - name: Resolve TestFlight metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_COMMIT="$(git rev-parse HEAD)"
+          SOURCE_COMMIT_SHORT="$(git rev-parse --short=7 HEAD)"
+          PROGRAM_VERSION="$(sed -nE 's/^[[:space:]]*project\(Qupil[[:space:]]+VERSION[[:space:]]+([0-9.]+).*/\1/p' CMakeLists.txt | head -n1)"
+          [[ -n "$PROGRAM_VERSION" ]]
+
+          # CFBundleVersion is numeric and unique for each workflow attempt.
+          IOS_BUILD_NUMBER="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+          [[ "$IOS_BUILD_NUMBER" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]
+
+          {
+            echo "QUPIL_SOURCE_COMMIT=$SOURCE_COMMIT"
+            echo "QUPIL_SOURCE_COMMIT_SHORT=$SOURCE_COMMIT_SHORT"
+            echo "QUPIL_SOURCE_VERSION=$PROGRAM_VERSION"
+            echo "QUPIL_IOS_BUILD_NUMBER=$IOS_BUILD_NUMBER"
+          } >> "$GITHUB_ENV"
+
+          echo "Qupil marketing version: $PROGRAM_VERSION"
+          echo "TestFlight build number: $IOS_BUILD_NUMBER"
+          echo "Bundle ID: $QUPIL_IOS_BUNDLE_ID"
+          echo "Source commit: $SOURCE_COMMIT"
+
+      - name: Show Apple toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          sw_vers
+          uname -m
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          cmake --version
+
+          XCODE_MAJOR="$(xcodebuild -version | awk '/^Xcode / { split($2, p, "."); print p[1]; exit }')"
+          [[ "$XCODE_MAJOR" =~ ^[0-9]+$ ]]
+          if ((XCODE_MAJOR < 26)); then
+            echo "::error::App Store Connect requires Qupil's 2026 iOS builds to use Xcode 26 or newer."
+            exit 1
+          fi
+
+      - name: Install Qt host and iOS
+        shell: bash
+        run: |
+          set -euo pipefail
+          AQT_VENV="$RUNNER_TEMP/aqt-venv-testflight"
+          QT_ROOT="$RUNNER_TEMP/Qt-testflight"
+          python3 -m venv "$AQT_VENV"
+          "$AQT_VENV/bin/python" -m pip install --upgrade pip
+          "$AQT_VENV/bin/python" -m pip install 'aqtinstall==3.3.0'
+
+          "$AQT_VENV/bin/python" -m aqt list-qt mac ios --arch "$QT_VERSION" | tee "$RUNNER_TEMP/qt-ios-testflight-arches.txt"
+          grep -Eq '(^|[[:space:]])ios([[:space:]]|$)' "$RUNNER_TEMP/qt-ios-testflight-arches.txt"
+
+          "$AQT_VENV/bin/python" -m aqt list-qt mac ios --modules "$QT_VERSION" ios | tee "$RUNNER_TEMP/qt-ios-testflight-modules.txt"
+          grep -Eq '(^|[[:space:]])qtmultimedia([[:space:]]|$)' "$RUNNER_TEMP/qt-ios-testflight-modules.txt"
+
+          "$AQT_VENV/bin/python" -m aqt install-qt --outputdir "$QT_ROOT" --internal mac desktop "$QT_VERSION" clang_64 --modules qtmultimedia
+          "$AQT_VENV/bin/python" -m aqt install-qt --outputdir "$QT_ROOT" --internal mac ios "$QT_VERSION" ios --modules qtmultimedia
+
+          test -x "$QT_ROOT/$QT_VERSION/macos/bin/qt-cmake"
+          test -x "$QT_ROOT/$QT_VERSION/ios/bin/qt-cmake"
+
+      - name: Re-run source validation on macOS
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test in source_sanity.py sql_static_smoke.py i18n_static_smoke.py i18n_catalog_smoke.py testflight_static_smoke.py; do
+            if [[ -f "tests/$test" ]]; then
+              python3 "tests/$test"
+            fi
+          done
+
+      - name: App Store asset preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          ICON="ios/Assets.xcassets/AppIcon.appiconset/AppIcon1024x1024.png"
+          test -s "$ICON"
+          WIDTH="$(sips -g pixelWidth "$ICON" | awk '/pixelWidth:/ {print $2}')"
+          HEIGHT="$(sips -g pixelHeight "$ICON" | awk '/pixelHeight:/ {print $2}')"
+          HAS_ALPHA="$(sips -g hasAlpha "$ICON" | awk '/hasAlpha:/ {print tolower($2)}')"
+          [[ "$WIDTH" == "1024" && "$HEIGHT" == "1024" ]] || {
+            echo "::error::App Store icon must be 1024x1024; got ${WIDTH}x${HEIGHT}."
+            exit 1
+          }
+          [[ "$HAS_ALPHA" != "yes" ]] || {
+            echo '::error::App Store icon must not contain an alpha channel.'
+            exit 1
+          }
+          grep -Fq 'XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "org.qupil.app"' CMakeLists.txt
+
+      - name: Compile translation catalog
+        shell: bash
+        run: |
+          set -euo pipefail
+          QT_HOST="$RUNNER_TEMP/Qt-testflight/$QT_VERSION/macos"
+          if [[ -f i18n/qupil_de.ts ]]; then
+            "$QT_HOST/bin/lrelease" i18n/qupil_de.ts -qm i18n/qupil_de.qm
+            test -s i18n/qupil_de.qm
+          fi
+
+      - name: Install distribution certificate and App Store profile
+        shell: bash
+        env:
+          IOS_DISTRIBUTION_CERTIFICATE_P12_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_P12_BASE64 }}
+          IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          IOS_APP_STORE_PROFILE_BASE64: ${{ secrets.IOS_APP_STORE_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+
+          KEYCHAIN_PATH="$RUNNER_TEMP/qupil-testflight.keychain-db"
+          P12_PATH="$RUNNER_TEMP/qupil-distribution.p12"
+          PROFILE_PATH="$RUNNER_TEMP/qupil-app-store.mobileprovision"
+          PROFILE_PLIST="$RUNNER_TEMP/qupil-app-store-profile.plist"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+
+          export P12_PATH PROFILE_PATH
+          python3 - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+
+          Path(os.environ['P12_PATH']).write_bytes(
+              base64.b64decode(os.environ['IOS_DISTRIBUTION_CERTIFICATE_P12_BASE64'], validate=True)
+          )
+          Path(os.environ['PROFILE_PATH']).write_bytes(
+              base64.b64decode(os.environ['IOS_APP_STORE_PROFILE_BASE64'], validate=True)
+          )
+          PY
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security default-keychain -d user -s "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+
+          security import "$P12_PATH" \
+            -k "$KEYCHAIN_PATH" \
+            -P "$IOS_DISTRIBUTION_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" >/dev/null
+
+          IDENTITIES="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH")"
+          printf '%s\n' "$IDENTITIES"
+          grep -Fq 'Apple Distribution' <<<"$IDENTITIES" || {
+            echo '::error::The imported P12 does not contain an Apple Distribution identity with private key.'
+            exit 1
+          }
+
+          openssl pkcs12 \
+            -in "$P12_PATH" \
+            -clcerts -nokeys \
+            -passin env:IOS_DISTRIBUTION_CERTIFICATE_PASSWORD \
+            -out "$RUNNER_TEMP/qupil-distribution-cert.pem"
+          CERT_SUBJECT="$(openssl x509 -in "$RUNNER_TEMP/qupil-distribution-cert.pem" -noout -subject -nameopt RFC2253)"
+          CERT_DATES="$(openssl x509 -in "$RUNNER_TEMP/qupil-distribution-cert.pem" -noout -dates)"
+          echo "$CERT_SUBJECT"
+          echo "$CERT_DATES"
+          grep -Fq "OU=$APPLE_TEAM_ID" <<<"$CERT_SUBJECT" || {
+            echo '::error::Apple Distribution certificate belongs to a different Team ID.'
+            exit 1
+          }
+          openssl x509 -in "$RUNNER_TEMP/qupil-distribution-cert.pem" -checkend 0 -noout
+
+          security cms -D -i "$PROFILE_PATH" > "$PROFILE_PLIST"
+          export PROFILE_PLIST
+          python3 - <<'PY'
+          import datetime as dt
+          import os
+          import plistlib
+          from pathlib import Path
+
+          profile = plistlib.loads(Path(os.environ['PROFILE_PLIST']).read_bytes())
+          expected_team = os.environ['APPLE_TEAM_ID']
+          expected_bundle = os.environ['QUPIL_IOS_BUNDLE_ID']
+          team_ids = profile.get('TeamIdentifier') or []
+          team = team_ids[0] if team_ids else ''
+          ent = profile.get('Entitlements') or {}
+          app_id = ent.get('application-identifier', '')
+          expected_app_id = f'{expected_team}.{expected_bundle}'
+          expiry = profile.get('ExpirationDate')
+          now = dt.datetime.now(dt.timezone.utc)
+          if expiry is not None and expiry.tzinfo is None:
+              expiry = expiry.replace(tzinfo=dt.timezone.utc)
+
+          errors = []
+          if team != expected_team:
+              errors.append(f'profile TeamIdentifier={team!r}, expected {expected_team!r}')
+          if app_id != expected_app_id:
+              errors.append(f'profile application-identifier={app_id!r}, expected {expected_app_id!r}')
+          if ent.get('get-task-allow', False):
+              errors.append('profile has get-task-allow=true (development profile, not App Store distribution)')
+          if profile.get('ProvisionsAllDevices'):
+              errors.append('profile is an enterprise profile, not App Store distribution')
+          if profile.get('ProvisionedDevices'):
+              errors.append('profile contains device UDIDs (development/ad-hoc profile, not App Store distribution)')
+          if expiry is None or expiry <= now:
+              errors.append(f'profile is expired or has no usable expiration date: {expiry!r}')
+          if errors:
+              raise SystemExit('Invalid App Store provisioning profile:\n- ' + '\n- '.join(errors))
+
+          github_env = Path(os.environ['GITHUB_ENV'])
+          with github_env.open('a', encoding='utf-8') as f:
+              f.write(f"IOS_PROFILE_UUID={profile['UUID']}\n")
+              f.write(f"IOS_PROFILE_NAME={profile['Name']}\n")
+
+          print('Provisioning profile:', profile['Name'])
+          print('UUID:', profile['UUID'])
+          print('Team:', team)
+          print('Application identifier:', app_id)
+          print('Expires:', expiry.isoformat())
+          PY
+
+          PROFILE_INSTALL_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILE_INSTALL_DIR"
+          cp "$PROFILE_PATH" "$PROFILE_INSTALL_DIR/$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$PROFILE_PLIST").mobileprovision"
+
+          echo "QUPIL_TESTFLIGHT_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+          echo "QUPIL_TESTFLIGHT_PROFILE_PLIST=$PROFILE_PLIST" >> "$GITHUB_ENV"
+
+      - name: Configure signed iPhone/iPad Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          QT_ROOT="$RUNNER_TEMP/Qt-testflight"
+          QT_HOST="$QT_ROOT/$QT_VERSION/macos"
+          QT_IOS="$QT_ROOT/$QT_VERSION/ios"
+          rm -rf build-ios-testflight
+
+          "$QT_IOS/bin/qt-cmake" \
+            -S . -B build-ios-testflight -G Xcode \
+            -DQT_HOST_PATH="$QT_HOST" \
+            -DBUILD_TESTING=OFF \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="$IOS_DEPLOYMENT_TARGET" \
+            -DQUPIL_IOS_BUILD_NUMBER="$QUPIL_IOS_BUILD_NUMBER" \
+            -DQT_USE_RISKY_DSYM_ARCHIVING_WORKAROUND=ON \
+            -DQUPIL_IOS_DISABLE_FFMPEG_CODE_SIGN_ON_COPY=OFF \
+            -DCMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGN_STYLE=Manual \
+            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY="Apple Distribution" \
+            -DCMAKE_XCODE_ATTRIBUTE_PROVISIONING_PROFILE_SPECIFIER="$IOS_PROFILE_NAME" \
+            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=YES \
+            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED=YES
+
+          XCODE_PROJECT="$(find build-ios-testflight -maxdepth 2 -type d -name '*.xcodeproj' -print -quit)"
+          [[ -n "$XCODE_PROJECT" ]]
+          echo "QUPIL_XCODE_PROJECT=$XCODE_PROJECT" >> "$GITHUB_ENV"
+          xcodebuild -list -project "$XCODE_PROJECT"
+
+      - name: Prebuild signed Release before archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Qt documents a CMake/Xcode archive issue that is avoided by first
+          # building the Release configuration before running xcodebuild archive.
+          cmake --build build-ios-testflight --config Release --parallel 4 -- \
+            -sdk iphoneos \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="$IOS_PROFILE_NAME" \
+            CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGNING_REQUIRED=YES
+
+      - name: Resolve Xcode scheme and archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          LIST_JSON="$RUNNER_TEMP/qupil-xcode-list.json"
+          xcodebuild -list -json -project "$QUPIL_XCODE_PROJECT" > "$LIST_JSON"
+          export LIST_JSON
+          SCHEME="$(python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          data = json.loads(Path(os.environ['LIST_JSON']).read_text())
+          container = data.get('project') or data.get('workspace') or {}
+          schemes = container.get('schemes') or []
+          if 'qupil' in schemes:
+              print('qupil')
+          elif 'Qupil' in schemes:
+              print('Qupil')
+          elif len(schemes) == 1:
+              print(schemes[0])
+          else:
+              raise SystemExit(f'Cannot choose Qupil Xcode scheme from {schemes!r}')
+          PY
+          )"
+          [[ -n "$SCHEME" ]]
+
+          ARCHIVE_PATH="$RUNNER_TEMP/Qupil-${QUPIL_SOURCE_VERSION}-${QUPIL_IOS_BUILD_NUMBER}.xcarchive"
+          rm -rf "$ARCHIVE_PATH"
+          xcodebuild \
+            -project "$QUPIL_XCODE_PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$ARCHIVE_PATH" \
+            archive \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="$IOS_PROFILE_NAME" \
+            CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGNING_REQUIRED=YES \
+            ENABLE_ONLY_ACTIVE_RESOURCES=NO
+
+          APP="$ARCHIVE_PATH/Products/Applications/Qupil.app"
+          test -d "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+
+          ACTUAL_BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")"
+          ACTUAL_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Info.plist")"
+          ACTUAL_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Info.plist")"
+          [[ "$ACTUAL_BUNDLE_ID" == "$QUPIL_IOS_BUNDLE_ID" ]]
+          [[ "$ACTUAL_VERSION" == "$QUPIL_SOURCE_VERSION" ]]
+          [[ "$ACTUAL_BUILD" == "$QUPIL_IOS_BUILD_NUMBER" ]]
+          test -s "$APP/embedded.mobileprovision"
+          DSYM_COUNT="$(find "$ARCHIVE_PATH/dSYMs" -maxdepth 1 -type d -name '*.dSYM' -print 2>/dev/null | wc -l | tr -d ' ')"
+          if [[ "$DSYM_COUNT" == "0" ]]; then
+            echo '::error::No dSYM bundle was archived; TestFlight crash symbolication would be incomplete.'
+            exit 1
+          fi
+
+          PRIVACY_COUNT="$(find "$APP" -name 'PrivacyInfo.xcprivacy' -print | wc -l | tr -d ' ')"
+          echo "Privacy manifests in app bundle: $PRIVACY_COUNT"
+          if [[ "$PRIVACY_COUNT" == "0" ]]; then
+            echo '::warning::No PrivacyInfo.xcprivacy was found in the final app bundle. This is not guessed automatically; review Apple privacy-manifest requirements before App Store submission.'
+          fi
+
+          security cms -D -i "$APP/embedded.mobileprovision" > "$RUNNER_TEMP/qupil-embedded-profile.plist"
+          EMBEDDED_APP_ID="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$RUNNER_TEMP/qupil-embedded-profile.plist")"
+          [[ "$EMBEDDED_APP_ID" == "$APPLE_TEAM_ID.$QUPIL_IOS_BUNDLE_ID" ]]
+
+          echo "QUPIL_ARCHIVE_PATH=$ARCHIVE_PATH" >> "$GITHUB_ENV"
+          echo "QUPIL_XCODE_SCHEME=$SCHEME" >> "$GITHUB_ENV"
+
+      - name: Export App Store Connect IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPORT_DIR="$RUNNER_TEMP/qupil-testflight-export"
+          EXPORT_OPTIONS="$RUNNER_TEMP/qupil-export-options.plist"
+          rm -rf "$EXPORT_DIR"
+          mkdir -p "$EXPORT_DIR" dist
+          export EXPORT_OPTIONS
+
+          python3 - <<'PY'
+          import os
+          import plistlib
+          from pathlib import Path
+
+          options = {
+              'method': 'app-store-connect',
+              'destination': 'export',
+              'signingStyle': 'manual',
+              'teamID': os.environ['APPLE_TEAM_ID'],
+              'signingCertificate': 'Apple Distribution',
+              'provisioningProfiles': {
+                  os.environ['QUPIL_IOS_BUNDLE_ID']: os.environ['IOS_PROFILE_NAME'],
+              },
+              'manageAppVersionAndBuildNumber': False,
+              'uploadSymbols': True,
+          }
+          with Path(os.environ['EXPORT_OPTIONS']).open('wb') as f:
+              plistlib.dump(options, f)
+          PY
+
+          plutil -p "$EXPORT_OPTIONS"
+          xcodebuild -exportArchive \
+            -archivePath "$QUPIL_ARCHIVE_PATH" \
+            -exportPath "$EXPORT_DIR" \
+            -exportOptionsPlist "$EXPORT_OPTIONS"
+
+          SOURCE_IPA="$(find "$EXPORT_DIR" -maxdepth 1 -type f -name '*.ipa' -print -quit)"
+          test -s "$SOURCE_IPA"
+          IPA_FILENAME="Qupil-${QUPIL_SOURCE_VERSION}-${QUPIL_SOURCE_COMMIT_SHORT}-TestFlight-build-${QUPIL_IOS_BUILD_NUMBER}.ipa"
+          IPA="dist/$IPA_FILENAME"
+          cp "$SOURCE_IPA" "$IPA"
+          test -s "$IPA"
+
+          VERIFY_DIR="$RUNNER_TEMP/qupil-testflight-verify"
+          rm -rf "$VERIFY_DIR"
+          mkdir -p "$VERIFY_DIR"
+          ditto -x -k "$IPA" "$VERIFY_DIR"
+          EXPORTED_APP="$(find "$VERIFY_DIR/Payload" -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -d "$EXPORTED_APP"
+          codesign --verify --deep --strict --verbose=2 "$EXPORTED_APP"
+          [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$EXPORTED_APP/Info.plist")" == "$QUPIL_IOS_BUNDLE_ID" ]]
+          [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$EXPORTED_APP/Info.plist")" == "$QUPIL_SOURCE_VERSION" ]]
+          [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$EXPORTED_APP/Info.plist")" == "$QUPIL_IOS_BUILD_NUMBER" ]]
+
+          DSYM_FILENAME="Qupil-${QUPIL_SOURCE_VERSION}-${QUPIL_SOURCE_COMMIT_SHORT}-TestFlight-build-${QUPIL_IOS_BUILD_NUMBER}-dSYMs.zip"
+          DSYM_ZIP="dist/$DSYM_FILENAME"
+          test -d "$QUPIL_ARCHIVE_PATH/dSYMs"
+          ditto -c -k --sequesterRsrc --keepParent "$QUPIL_ARCHIVE_PATH/dSYMs" "$DSYM_ZIP"
+          test -s "$DSYM_ZIP"
+
+          shasum -a 256 "$IPA"
+          ls -lh "$IPA"
+          {
+            echo "QUPIL_TESTFLIGHT_IPA_FILENAME=$IPA_FILENAME"
+            echo "QUPIL_TESTFLIGHT_IPA=$IPA"
+            echo "QUPIL_TESTFLIGHT_DSYM_FILENAME=$DSYM_FILENAME"
+            echo "QUPIL_TESTFLIGHT_DSYM_ZIP=$DSYM_ZIP"
+          } >> "$GITHUB_ENV"
+
+      - name: Upload signed IPA artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Qupil-TestFlight-IPA
+          path: ${{ env.QUPIL_TESTFLIGHT_IPA }}
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload dSYMs artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Qupil-TestFlight-dSYMs
+          path: ${{ env.QUPIL_TESTFLIGHT_DSYM_ZIP }}
+          archive: false
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Validate and upload to App Store Connect
+        shell: bash
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8_BASE64 }}
+        run: |
+          set -euo pipefail
+          KEY_DIR="$HOME/.appstoreconnect/private_keys"
+          KEY_PATH="$KEY_DIR/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+          mkdir -p "$KEY_DIR"
+          chmod 700 "$KEY_DIR"
+          export KEY_PATH
+
+          python3 - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+          Path(os.environ['KEY_PATH']).write_bytes(
+              base64.b64decode(os.environ['APP_STORE_CONNECT_API_KEY_P8_BASE64'], validate=True)
+          )
+          PY
+          chmod 600 "$KEY_PATH"
+
+          echo 'Validating signed IPA with App Store Connect...'
+          xcrun altool \
+            --validate-app \
+            -f "$QUPIL_TESTFLIGHT_IPA" \
+            -t ios \
+            --apiKey "$APP_STORE_CONNECT_KEY_ID" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" \
+            2>&1 | tee "$RUNNER_TEMP/qupil-altool-validate.log"
+
+          echo 'Uploading signed IPA to App Store Connect/TestFlight...'
+          xcrun altool \
+            --upload-app \
+            -f "$QUPIL_TESTFLIGHT_IPA" \
+            -t ios \
+            --apiKey "$APP_STORE_CONNECT_KEY_ID" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" \
+            2>&1 | tee "$RUNNER_TEMP/qupil-altool-upload.log"
+
+      - name: TestFlight summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo '## Qupil TestFlight upload'
+            echo
+            echo "- Bundle ID: \`$QUPIL_IOS_BUNDLE_ID\`"
+            echo "- Version: \`$QUPIL_SOURCE_VERSION\`"
+            echo "- Build: \`$QUPIL_IOS_BUILD_NUMBER\`"
+            echo "- Commit: \`$QUPIL_SOURCE_COMMIT\`"
+            echo "- IPA: \`$QUPIL_TESTFLIGHT_IPA_FILENAME\`"
+            echo '- App Store Connect accepted the upload; Apple still has to process the build before it appears in TestFlight.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Clean signing material
+        if: ${{ always() }}
+        shell: bash
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+        run: |
+          set +e
+          if [[ -n "${IOS_PROFILE_UUID:-}" ]]; then
+            rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/$IOS_PROFILE_UUID.mobileprovision"
+          fi
+          if [[ -n "${APP_STORE_CONNECT_KEY_ID:-}" ]]; then
+            rm -f "$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+          fi
+          if [[ -n "${QUPIL_TESTFLIGHT_KEYCHAIN:-}" ]]; then
+            security delete-keychain "$QUPIL_TESTFLIGHT_KEYCHAIN" >/dev/null 2>&1 || true
+          fi
+          rm -f \
+            "$RUNNER_TEMP/qupil-distribution.p12" \
+            "$RUNNER_TEMP/qupil-app-store.mobileprovision" \
+            "$RUNNER_TEMP/qupil-distribution-cert.pem" \
+            "$RUNNER_TEMP/qupil-app-store-profile.plist" \
+            "$RUNNER_TEMP/qupil-embedded-profile.plist"
