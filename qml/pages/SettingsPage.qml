@@ -9,6 +9,9 @@ Page {
 
     property string lessonEndSoundPath: ""
     property string reminderSoundPath: ""
+    // Programmatic assignments during load/language switching must not write
+    // over stored settings or trigger native notification rescheduling.
+    property bool loading: true
 
     function soundName(path, fallbackName) {
         if (!path || path.length === 0)
@@ -19,6 +22,8 @@ Page {
     }
 
     function load() {
+        flushPendingWrites()
+        root.loading = true
         form.locations.text = App.settingList("lessonLocations").join("\n")
         form.genres.text = App.settingList("genres").join("\n")
         form.instruments.text = App.settingList("instruments").join("\n")
@@ -36,39 +41,93 @@ Page {
         if (Qt.platform.os === "ios")
             App.refreshNativeReminderDiagnostics()
         form.shareLessonContent.checked = App.settingValue("saveNotesPiecesForAllPupils", true)
+        root.loading = false
     }
 
     function cleanedLines(text) {
         return text.split(/\r?\n/).map(x => x.trim()).filter(x => x.length)
     }
 
-    function save() {
+    function persistValue(key, value, reschedule) {
+        if (root.loading)
+            return
+        App.setSettingValue(key, value)
+        if (reschedule)
+            requestReminderSync()
+    }
+
+    function requestReminderSync() {
+        if (!root.loading)
+            reminderSyncTimer.restart()
+    }
+
+    function deferListSave() {
+        if (!root.loading)
+            listSaveTimer.restart()
+    }
+
+    function saveListsNow() {
+        if (root.loading)
+            return
         App.setSettingList("lessonLocations", cleanedLines(form.locations.text))
         App.setSettingList("genres", cleanedLines(form.genres.text))
         App.setSettingList("instruments", cleanedLines(form.instruments.text))
         App.setSettingList("instrumentSizes", cleanedLines(form.sizes.text))
-        App.setSettingValue("birthdayReminder", form.birthdayReminder.checked)
-        App.setSettingValue("lessonEndReminder", form.lessonEndReminder.checked)
-        App.setSettingValue("minutesToLessonEndReminder", form.lessonEndMinutes.value)
-        App.setSettingValue("lessonEndSoundPath", root.lessonEndSoundPath)
-        App.setSettingValue("lessonEndSoundVolume", Math.round(form.lessonEndVolume.value))
-        App.setSettingValue("reminderSoundPath", root.reminderSoundPath)
-        App.setSettingValue("reminderSoundVolume", Math.round(form.reminderVolume.value))
-        App.setSettingValue("saveNotesPiecesForAllPupils", form.shareLessonContent.checked)
-        App.syncNativeReminders()
-        saved.open()
     }
+
+    function flushLists() {
+        if (!root.loading && listSaveTimer.running) {
+            listSaveTimer.stop()
+            saveListsNow()
+        }
+    }
+
+    function deferVolumes() {
+        if (!root.loading)
+            volumeSaveTimer.restart()
+    }
+
+    function saveVolumesNow() {
+        if (root.loading)
+            return
+        App.setSettingValue("lessonEndSoundVolume", Math.round(form.lessonEndVolume.value))
+        App.setSettingValue("reminderSoundVolume", Math.round(form.reminderVolume.value))
+        requestReminderSync()
+    }
+
+    function flushVolumes() {
+        if (!root.loading && volumeSaveTimer.running) {
+            volumeSaveTimer.stop()
+            saveVolumesNow()
+        }
+    }
+
+    function flushPendingWrites() {
+        flushLists()
+        flushVolumes()
+        if (reminderSyncTimer.running) {
+            reminderSyncTimer.stop()
+            App.syncNativeReminders()
+        }
+    }
+
+    // Coalesce rapid changes to avoid overlapping asynchronous iOS schedule
+    // replacements. Every delayed write is flushed on focus loss, navigation,
+    // application backgrounding and language reload.
+    Timer { id: listSaveTimer; interval: 500; repeat: false; onTriggered: root.saveListsNow() }
+    Timer { id: volumeSaveTimer; interval: 350; repeat: false; onTriggered: root.saveVolumesNow() }
+    Timer { id: reminderSyncTimer; interval: 180; repeat: false; onTriggered: App.syncNativeReminders() }
 
     Action { id: backupAction; onTriggered: backupDialog.open() }
     Action { id: restoreAction; onTriggered: form.restoreConfirm.open() }
     Action { id: csvImportAction; onTriggered: root.openCsvImport() }
-    Action { id: saveAction; onTriggered: root.save() }
     Action { id: chooseLessonEndSoundAction; onTriggered: lessonEndSoundDialog.open() }
     Action {
         id: defaultLessonEndSoundAction
         onTriggered: {
             root.lessonEndSoundPath = ""
             form.lessonEndSoundPath.text = root.soundName("", "lesson-end.wav")
+            root.persistValue("lessonEndSoundPath", "", true)
         }
     }
     Action {
@@ -81,6 +140,7 @@ Page {
         onTriggered: {
             root.reminderSoundPath = ""
             form.reminderSoundPath.text = root.soundName("", "reminder.wav")
+            root.persistValue("reminderSoundPath", "", true)
         }
     }
     Action {
@@ -91,6 +151,7 @@ Page {
     Action {
         id: iosBackgroundTestAction
         onTriggered: {
+            root.flushPendingWrites()
             if (App.scheduleNativeReminderTest())
                 iosTestScheduled.open()
             else
@@ -108,7 +169,6 @@ Page {
         backupAction: backupAction
         restoreAction: restoreAction
         csvImportAction: csvImportAction
-        saveAction: saveAction
         chooseLessonEndSoundAction: chooseLessonEndSoundAction
         defaultLessonEndSoundAction: defaultLessonEndSoundAction
         testLessonEndSoundAction: testLessonEndSoundAction
@@ -127,6 +187,63 @@ Page {
         restoreConfirm.onAccepted: restoreDialog.open()
     }
 
+    // Only user changes are persisted. The load() guard prevents any signals
+    // caused by programmatic updates from writing an intermediate state.
+    Connections {
+        target: form.birthdayReminder
+        function onToggled() { root.persistValue("birthdayReminder", form.birthdayReminder.checked, false) }
+    }
+    Connections {
+        target: form.lessonEndReminder
+        function onToggled() { root.persistValue("lessonEndReminder", form.lessonEndReminder.checked, true) }
+    }
+    Connections {
+        target: form.lessonEndMinutes
+        function onValueChanged() { root.persistValue("minutesToLessonEndReminder", form.lessonEndMinutes.value, true) }
+    }
+    Connections {
+        target: form.shareLessonContent
+        function onToggled() { root.persistValue("saveNotesPiecesForAllPupils", form.shareLessonContent.checked, false) }
+    }
+    Connections {
+        target: form.lessonEndVolume
+        function onValueChanged() { root.deferVolumes() }
+        function onPressedChanged() { if (!form.lessonEndVolume.pressed) root.flushVolumes() }
+    }
+    Connections {
+        target: form.reminderVolume
+        function onValueChanged() { root.deferVolumes() }
+        function onPressedChanged() { if (!form.reminderVolume.pressed) root.flushVolumes() }
+    }
+    Connections {
+        target: form.locations
+        function onTextChanged() { root.deferListSave() }
+        function onActiveFocusChanged() { if (!form.locations.activeFocus) root.flushLists() }
+    }
+    Connections {
+        target: form.genres
+        function onTextChanged() { root.deferListSave() }
+        function onActiveFocusChanged() { if (!form.genres.activeFocus) root.flushLists() }
+    }
+    Connections {
+        target: form.instruments
+        function onTextChanged() { root.deferListSave() }
+        function onActiveFocusChanged() { if (!form.instruments.activeFocus) root.flushLists() }
+    }
+    Connections {
+        target: form.sizes
+        function onTextChanged() { root.deferListSave() }
+        function onActiveFocusChanged() { if (!form.sizes.activeFocus) root.flushLists() }
+    }
+    Connections {
+        target: Qt.application
+        function onStateChanged() {
+            if (Qt.application.state !== Qt.ApplicationActive)
+                root.flushPendingWrites()
+        }
+        function onAboutToQuit() { root.flushPendingWrites() }
+    }
+
     FileDialog {
         id: lessonEndSoundDialog
         title: qsTr("Choose lesson end sound")
@@ -139,6 +256,7 @@ Page {
             if (imported && imported.length) {
                 root.lessonEndSoundPath = imported
                 form.lessonEndSoundPath.text = root.soundName(imported, "lesson-end.wav")
+                root.persistValue("lessonEndSoundPath", imported, true)
             } else {
                 soundImportFailed.open()
             }
@@ -157,6 +275,7 @@ Page {
             if (imported && imported.length) {
                 root.reminderSoundPath = imported
                 form.reminderSoundPath.text = root.soundName(imported, "reminder.wav")
+                root.persistValue("reminderSoundPath", imported, true)
             } else {
                 soundImportFailed.open()
             }
@@ -177,12 +296,14 @@ Page {
         title: qsTr("Open Qupil backup")
         fileMode: FileDialog.OpenFile
         nameFilters: [qsTr("Qupil backup (*.db)")]
-        onAccepted: if (App.restoreBackup(selectedFile)) { root.load(); backupRestored.open() }
+        onAccepted: {
+            root.flushPendingWrites()
+            if (App.restoreBackup(selectedFile)) { root.load(); backupRestored.open() }
+        }
     }
 
     Popup { id: backupSaved; anchors.centerIn: parent; Label { text: qsTr("Backup created") } }
     Popup { id: backupRestored; anchors.centerIn: parent; Label { text: qsTr("Backup restored") } }
-    Popup { id: saved; anchors.centerIn: parent; Label { text: qsTr("Settings saved") } }
     Popup {
         id: iosTestScheduled
         anchors.centerIn: parent
@@ -201,5 +322,6 @@ Page {
     }
 
     Component.onCompleted: load()
+    Component.onDestruction: flushPendingWrites()
     Connections { target: Language; function onEffectiveLanguageChanged() { root.load() } }
 }

@@ -4,6 +4,7 @@
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
+#include <QtGlobal>
 
 #include <functional>
 
@@ -13,6 +14,14 @@ bool qupilSyncNativeReminders(const QVariantList &schedule,
                               const QString &reminderSoundPath,
                               int reminderVolume,
                               QString *errorMessage = nullptr);
+
+// Converts an imported iOS notification sound to 16-bit PCM/CAF in
+// the app's Library/Sounds. On failure the previously installed sound stays intact.
+#ifdef Q_OS_IOS
+QString qupilNormalizeIosReminderSound(const QString &profile,
+                                       const QString &sourcePath,
+                                       QString *errorMessage = nullptr);
+#endif
 
 bool qupilExactAlarmPermissionGranted();
 void qupilRequestExactAlarmPermission();

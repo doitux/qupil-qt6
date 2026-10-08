@@ -52,7 +52,7 @@ if(IOS)
         src/app/native_reminders_ios.mm
         PROPERTIES COMPILE_FLAGS "-fobjc-arc"
     )
-    target_link_libraries(qupil PRIVATE "-framework UIKit" "-framework UserNotifications")
+    target_link_libraries(qupil PRIVATE "-framework UIKit" "-framework UserNotifications" "-framework AudioToolbox")
 elseif(ANDROID)
     target_sources(qupil PRIVATE
         src/app/native_share.cpp

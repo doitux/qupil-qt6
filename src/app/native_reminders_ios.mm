@@ -4,10 +4,17 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <UserNotifications/UserNotifications.h>
+#import <AudioToolbox/AudioToolbox.h>
 
 #include <QFile>
 #include <QFileInfo>
 #include <QStringList>
+#include <QTemporaryFile>
+
+#include <cstdio>
+#include <cerrno>
+#include <cstring>
+#include <vector>
 #include <QVariantMap>
 
 @interface QupilNotificationDelegate : NSObject<UNUserNotificationCenterDelegate>
@@ -54,13 +61,6 @@ QString qtString(NSString *value)
     return value ? QString::fromNSString(value) : QString{};
 }
 
-bool iosNotificationSoundExtensionSupported(const QString &path)
-{
-    const QString suffix = QFileInfo(path).suffix().toLower();
-    return suffix == QStringLiteral("wav") || suffix == QStringLiteral("aiff")
-        || suffix == QStringLiteral("aif") || suffix == QStringLiteral("caf");
-}
-
 NSURL *notificationSoundsDirectory()
 {
     NSFileManager *fm = NSFileManager.defaultManager;
@@ -90,6 +90,9 @@ bool copyQtResource(const QString &resourcePath, NSURL *destination)
     return false;
 }
 
+// Both normal scheduling and the 15-second test reference the exact CAF
+// written by qupilNormalizeIosReminderSound. Never copy an unknown codec into
+// Library/Sounds and hope that UNNotificationSound can decode it.
 NSString *prepareNotificationSound(const QString &sourcePath,
                                    NSString *profilePrefix,
                                    NSString *fallbackName,
@@ -99,42 +102,31 @@ NSString *prepareNotificationSound(const QString &sourcePath,
     if (!sounds)
         return fallbackName;
 
-    NSFileManager *fm = NSFileManager.defaultManager;
-
-    if (sourcePath.isEmpty()) {
-        // Qt QRC resources are not files the iOS notification service can read.
-        // Materialize the built-in WAV into Library/Sounds before scheduling.
-        NSURL *destination = [sounds URLByAppendingPathComponent:fallbackName];
-        if (copyQtResource(fallbackResourcePath, destination))
-            return fallbackName;
-        return fallbackName; // iOS falls back to the default notification sound if unavailable.
-    }
-
-    if (!iosNotificationSoundExtensionSupported(sourcePath))
+    NSURL *defaultURL = [sounds URLByAppendingPathComponent:fallbackName];
+    if (!QFileInfo::exists(qtString(defaultURL.path)))
+        copyQtResource(fallbackResourcePath, defaultURL);
+    if (sourcePath.isEmpty())
         return fallbackName;
 
-    NSString *extension = nsString(QFileInfo(sourcePath).suffix().toLower());
-    NSString *fileName = [NSString stringWithFormat:@"%@.%@", profilePrefix, extension];
-    NSURL *destination = [sounds URLByAppendingPathComponent:fileName];
+    NSString *fileName = [profilePrefix stringByAppendingString:@".caf"];
+    NSURL *expectedURL = [sounds URLByAppendingPathComponent:fileName];
+    const QFileInfo sourceInfo(sourcePath);
+    const QFileInfo expectedInfo(qtString(expectedURL.path));
+    if (sourceInfo.isFile() && expectedInfo.isFile() &&
+        sourceInfo.canonicalFilePath() == expectedInfo.canonicalFilePath())
+        return fileName;
 
-    NSArray<NSURL *> *existing = [fm contentsOfDirectoryAtURL:sounds
-                                  includingPropertiesForKeys:nil
-                                                     options:0
-                                                       error:nil];
-    NSString *prefix = [profilePrefix stringByAppendingString:@"."];
-    for (NSURL *url in existing) {
-        if ([url.lastPathComponent hasPrefix:prefix] && ![url.lastPathComponent isEqualToString:fileName])
-            [fm removeItemAtURL:url error:nil];
-    }
-
-    [fm removeItemAtURL:destination error:nil];
-    NSError *error = nil;
-    if (![fm copyItemAtPath:nsString(sourcePath) toPath:destination.path error:&error]) {
-        NSLog(@"Qupil could not copy custom notification sound %@: %@", nsString(sourcePath), error);
-        return fallbackName;
-    }
-    return fileName;
+    NSLog(@"QUPIL_IOS_SOUND invalid custom sound path: %@; using default", nsString(sourcePath));
+    return fallbackName;
 }
+
+struct ScopedExtAudioFile {
+    ExtAudioFileRef ref = nullptr;
+    ~ScopedExtAudioFile() { if (ref) ExtAudioFileDispose(ref); }
+    ScopedExtAudioFile(const ScopedExtAudioFile &) = delete;
+    ScopedExtAudioFile &operator=(const ScopedExtAudioFile &) = delete;
+    ScopedExtAudioFile() = default;
+};
 
 QupilNotificationDelegate *notificationDelegate()
 {
@@ -266,6 +258,135 @@ void addDiagnosticTestRequest(UNUserNotificationCenter *center,
 }
 
 } // namespace
+
+QString qupilNormalizeIosReminderSound(const QString &profile,
+                                       const QString &sourcePath,
+                                       QString *errorMessage)
+{
+    auto fail = [errorMessage](const QString &message) -> QString {
+        if (errorMessage)
+            *errorMessage = message;
+        return {};
+    };
+
+    NSString *fileName = nil;
+    if (profile == QStringLiteral("lessonEnd"))
+        fileName = @"qupil-lesson-end.caf";
+    else if (profile == QStringLiteral("reminder"))
+        fileName = @"qupil-reminder.caf";
+    else
+        return fail(QStringLiteral("Unknown notification sound profile."));
+
+    NSURL *sounds = notificationSoundsDirectory();
+    if (!sounds)
+        return fail(QStringLiteral("Library/Sounds is not writable."));
+    NSURL *finalURL = [sounds URLByAppendingPathComponent:fileName];
+    const QString finalPath = qtString(finalURL.path);
+    if (!QFileInfo(sourcePath).isFile())
+        return fail(QStringLiteral("The selected audio file is missing or unreadable."));
+
+    // A file generated by an earlier import needs no re-encoding on startup.
+    if (QFileInfo(sourcePath).canonicalFilePath() == QFileInfo(finalPath).canonicalFilePath()) {
+        if (errorMessage)
+            errorMessage->clear();
+        return finalPath;
+    }
+
+    ScopedExtAudioFile input;
+    const OSStatus openStatus = ExtAudioFileOpenURL(
+        (__bridge CFURLRef)[NSURL fileURLWithPath:nsString(sourcePath)], &input.ref);
+    if (openStatus != noErr)
+        return fail(QStringLiteral("Audio decoder could not open the file (OSStatus %1).")
+                        .arg(openStatus));
+
+    AudioStreamBasicDescription sourceFormat{};
+    UInt32 size = sizeof(sourceFormat);
+    OSStatus status = ExtAudioFileGetProperty(input.ref, kExtAudioFileProperty_FileDataFormat,
+                                               &size, &sourceFormat);
+    if (status != noErr)
+        return fail(QStringLiteral("Could not inspect audio format (OSStatus %1).").arg(status));
+    if (sourceFormat.mSampleRate <= 0 || sourceFormat.mChannelsPerFrame < 1 ||
+        sourceFormat.mChannelsPerFrame > 2)
+        return fail(QStringLiteral("The audio must be mono or stereo with a valid sample rate."));
+
+    // 16-bit little-endian signed interleaved PCM in a Core Audio Format file.
+    // Keep the source sample rate: decoding and file writing use the same ASBD.
+    AudioStreamBasicDescription pcm{};
+    pcm.mSampleRate = sourceFormat.mSampleRate;
+    pcm.mFormatID = kAudioFormatLinearPCM;
+    pcm.mFormatFlags = kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked;
+    pcm.mChannelsPerFrame = sourceFormat.mChannelsPerFrame;
+    pcm.mBitsPerChannel = 16;
+    pcm.mFramesPerPacket = 1;
+    pcm.mBytesPerFrame = 2 * pcm.mChannelsPerFrame;
+    pcm.mBytesPerPacket = pcm.mBytesPerFrame;
+    status = ExtAudioFileSetProperty(input.ref, kExtAudioFileProperty_ClientDataFormat,
+                                     sizeof(pcm), &pcm);
+    if (status != noErr)
+        return fail(QStringLiteral("Audio decoding is unsupported (OSStatus %1).").arg(status));
+
+    // Write a separate file first. A failed import must not break notifications
+    // already using the previous CAF at finalPath.
+    QTemporaryFile temporary(qtString(sounds.path) + QStringLiteral("/qupil-import-XXXXXX.caf"));
+    if (!temporary.open())
+        return fail(temporary.errorString());
+    const QString temporaryPath = temporary.fileName();
+    temporary.close();
+
+    ScopedExtAudioFile output;
+    status = ExtAudioFileCreateWithURL(
+        (__bridge CFURLRef)[NSURL fileURLWithPath:nsString(temporaryPath)],
+        kAudioFileCAFType, &pcm, nullptr, kAudioFileFlags_EraseFile, &output.ref);
+    if (status != noErr)
+        return fail(QStringLiteral("Could not create PCM/CAF audio (OSStatus %1).").arg(status));
+    status = ExtAudioFileSetProperty(output.ref, kExtAudioFileProperty_ClientDataFormat,
+                                     sizeof(pcm), &pcm);
+    if (status != noErr)
+        return fail(QStringLiteral("Could not configure CAF output (OSStatus %1).").arg(status));
+
+    constexpr UInt32 chunkFrames = 2048;
+    std::vector<char> samples(chunkFrames * pcm.mBytesPerFrame);
+    qint64 totalFrames = 0;
+    for (;;) {
+        AudioBufferList buffer{};
+        buffer.mNumberBuffers = 1;
+        buffer.mBuffers[0].mNumberChannels = pcm.mChannelsPerFrame;
+        buffer.mBuffers[0].mDataByteSize = UInt32(samples.size());
+        buffer.mBuffers[0].mData = samples.data();
+        UInt32 frames = chunkFrames;
+        status = ExtAudioFileRead(input.ref, &frames, &buffer);
+        if (status != noErr)
+            return fail(QStringLiteral("Audio decoding failed (OSStatus %1).").arg(status));
+        if (frames == 0)
+            break;
+        totalFrames += frames;
+        // Apple requires notification sounds to be strictly shorter than 30 s.
+        if (double(totalFrames) / pcm.mSampleRate >= 30.0)
+            return fail(QStringLiteral("iOS notification sounds must be shorter than 30 seconds."));
+        status = ExtAudioFileWrite(output.ref, frames, &buffer);
+        if (status != noErr)
+            return fail(QStringLiteral("Writing PCM/CAF failed (OSStatus %1).").arg(status));
+    }
+    if (totalFrames == 0)
+        return fail(QStringLiteral("The audio file is empty."));
+
+    status = ExtAudioFileDispose(output.ref);
+    output.ref = nullptr;
+    if (status != noErr)
+        return fail(QStringLiteral("Finalizing PCM/CAF failed (OSStatus %1).").arg(status));
+
+    // POSIX rename is atomic within Library/Sounds; this is a private sandbox
+    // directory and no unfinished conversion is ever visible to the scheduler.
+    if (std::rename(temporaryPath.toUtf8().constData(), finalPath.toUtf8().constData()) != 0)
+        return fail(QStringLiteral("Could not install notification sound: %1")
+                        .arg(QString::fromLocal8Bit(std::strerror(errno))));
+
+    if (errorMessage)
+        errorMessage->clear();
+    NSLog(@"QUPIL_IOS_SOUND converted profile=%@ duration=%.2fs output=%@",
+          nsString(profile), double(totalFrames) / pcm.mSampleRate, nsString(finalPath));
+    return finalPath;
+}
 
 bool qupilSyncNativeReminders(const QVariantList &schedule,
                               const QString &lessonEndSoundPath,

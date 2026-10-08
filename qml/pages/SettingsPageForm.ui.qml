@@ -18,7 +18,6 @@ Item {
     property var backupAction: null
     property var restoreAction: null
     property var csvImportAction: null
-    property var saveAction: null
     property var chooseLessonEndSoundAction: null
     property var defaultLessonEndSoundAction: null
     property var testLessonEndSoundAction: null
@@ -206,7 +205,6 @@ Item {
                 }
             }
 
-            Button { text: qsTr("Save settings"); Layout.margins: 12; action: root.saveAction }
             Item { Layout.preferredHeight: 12 }
         }
     }

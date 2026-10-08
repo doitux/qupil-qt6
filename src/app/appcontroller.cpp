@@ -154,6 +154,27 @@ AppController::AppController(QObject *parent)
         setError(m_database.lastError());
     else {
         importLegacySettings();
+#if defined(Q_OS_IOS)
+        // One-time/lazy migration of sounds chosen before the CAF converter
+        // existed. Importing a bad file never destroys the saved original.
+        QSettings settings;
+        for (const auto &profile : {QStringLiteral("lessonEnd"), QStringLiteral("reminder")}) {
+            const QString key = profile == QStringLiteral("lessonEnd")
+                ? QStringLiteral("lessonEndSoundPath") : QStringLiteral("reminderSoundPath");
+            const QString previousPath = settings.value(QStringLiteral("settings/") + key).toString();
+            if (previousPath.isEmpty())
+                continue;
+            QString error;
+            const QString normalized = qupilNormalizeIosReminderSound(profile, previousPath, &error);
+            if (!normalized.isEmpty()) {
+                if (normalized != previousPath)
+                    settings.setValue(QStringLiteral("settings/") + key, normalized);
+            } else {
+                qWarning().noquote() << QStringLiteral("QUPIL_IOS_SOUND migration (%1): %2")
+                                            .arg(profile, error);
+            }
+        }
+#endif
         refreshAll();
     }
     emit readyChanged();
@@ -2731,6 +2752,30 @@ QString AppController::importReminderSound(const QString &profile, const QUrl &s
         setError(tr("Could not create the Qupil sound directory."));
         return {};
     }
+#if defined(Q_OS_IOS)
+    // Copy while the document picker's access is valid; AudioToolbox opens
+    // only a local sandbox file. A temporary import cannot overwrite an old
+    // sound (or its QSettings path) if decoding/validation fails.
+    QTemporaryFile staging(QDir(soundDir).filePath(QStringLiteral("import-XXXXXX.%1").arg(suffix)));
+    if (!staging.open()) {
+        setError(tr("Could not import sound file: %1").arg(staging.errorString()));
+        return {};
+    }
+    const QString stagedPath = staging.fileName();
+    staging.close();
+    QString error;
+    if (!streamFile(sourcePath, stagedPath, &error)) {
+        setError(tr("Could not import sound file: %1").arg(error));
+        return {};
+    }
+    const QString normalized = qupilNormalizeIosReminderSound(profile, stagedPath, &error);
+    if (normalized.isEmpty()) {
+        setError(tr("Could not import sound file: %1").arg(error));
+        return {};
+    }
+    clearError();
+    return normalized;
+#else
     QString fileName = QFileInfo(source.fileName()).fileName();
     fileName.replace(QRegularExpression(QStringLiteral("[^A-Za-z0-9._ -]+")), QStringLiteral("_"));
     if (fileName.isEmpty())
@@ -2752,6 +2797,7 @@ QString AppController::importReminderSound(const QString &profile, const QUrl &s
     }
     clearError();
     return destination;
+#endif
 }
 
 QVariantList AppController::nativeReminderSchedule() const
