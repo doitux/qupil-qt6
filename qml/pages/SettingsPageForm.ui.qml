@@ -26,6 +26,7 @@ Item {
     property var testReminderSoundAction: null
     property var exactAlarmAction: null
     property var iosBackgroundTestAction: null
+    property var iosGeneralTestAction: null
     property var iosDiagnosticsRefreshAction: null
 
     property alias languageCombo: languageCombo
@@ -134,10 +135,17 @@ Item {
                     }
                     RowLayout {
                         Layout.fillWidth: true
+                        Label { text: qsTr("Lesson end sound") }
                         Button { text: qsTr("Test in 15 seconds"); action: root.iosBackgroundTestAction }
-                        Button { text: qsTr("Refresh status"); action: root.iosDiagnosticsRefreshAction }
                         Item { Layout.fillWidth: true }
                     }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Label { text: qsTr("Sound for reminders") }
+                        Button { text: qsTr("Test in 15 seconds"); action: root.iosGeneralTestAction }
+                        Item { Layout.fillWidth: true }
+                    }
+                    Button { text: qsTr("Refresh status"); action: root.iosDiagnosticsRefreshAction }
                     Label {
                         text: root.nativeReminderDiagnostics
                         font.family: "monospace"

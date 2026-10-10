@@ -28,8 +28,11 @@ void qupilRequestExactAlarmPermission();
 
 using QupilReminderDiagnosticsCallback = std::function<void(const QVariantMap &)>;
 
-bool qupilScheduleNativeReminderTest(const QString &lessonEndSoundPath,
-                                     int lessonEndVolume,
+// The lessonEnd and reminder profiles use the same sound resolver as real
+// scheduled local notifications, but distinct diagnostic request identifiers.
+bool qupilScheduleNativeReminderTest(const QString &profile,
+                                     const QString &soundPath,
+                                     int volume,
                                      const QString &title,
                                      const QString &body,
                                      QString *errorMessage = nullptr);

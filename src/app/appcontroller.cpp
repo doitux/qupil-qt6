@@ -2981,16 +2981,33 @@ void AppController::refreshNativeReminderDiagnostics()
 
 bool AppController::scheduleNativeReminderTest()
 {
+    return scheduleNativeReminderTestForProfile(QStringLiteral("lessonEnd"));
+}
+
+bool AppController::scheduleNativeGeneralReminderTest()
+{
+    return scheduleNativeReminderTestForProfile(QStringLiteral("reminder"));
+}
+
+bool AppController::scheduleNativeReminderTestForProfile(const QString &profile)
+{
 #if defined(Q_OS_IOS)
     clearError();
-    QString error;
-    const int volume = qBound(0, settingValue(QStringLiteral("lessonEndSoundVolume"), 7).toInt(), 10);
+    const bool lessonEnd = profile == QStringLiteral("lessonEnd");
+    const QString volumeKey = lessonEnd ? QStringLiteral("lessonEndSoundVolume")
+                                        : QStringLiteral("reminderSoundVolume");
+    const QString pathKey = lessonEnd ? QStringLiteral("lessonEndSoundPath")
+                                      : QStringLiteral("reminderSoundPath");
+    const int volume = qBound(0, settingValue(volumeKey, 7).toInt(), 10);
     if (volume <= 0) {
-        setError(tr("Lesson end sound volume is 0."));
+        setError(lessonEnd ? tr("Lesson end sound volume is 0.")
+                           : tr("Notification sound volume is 0."));
         return false;
     }
+    QString error;
     const bool ok = qupilScheduleNativeReminderTest(
-        settingValue(QStringLiteral("lessonEndSoundPath"), QString{}).toString(),
+        profile,
+        settingValue(pathKey, QString{}).toString(),
         volume,
         tr("Qupil background reminder test"),
         tr("If you can see and hear this while Qupil is in the background, iOS delivery works."),
@@ -3002,6 +3019,7 @@ bool AppController::scheduleNativeReminderTest()
     QTimer::singleShot(500, this, &AppController::refreshNativeReminderDiagnostics);
     return true;
 #else
+    Q_UNUSED(profile)
     setError(tr("The background reminder test is only available on iOS/iPadOS."));
     return false;
 #endif

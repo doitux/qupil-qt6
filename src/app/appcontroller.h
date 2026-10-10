@@ -120,6 +120,7 @@ public:
     Q_INVOKABLE void requestExactAlarmPermission();
     Q_INVOKABLE void refreshNativeReminderDiagnostics();
     Q_INVOKABLE bool scheduleNativeReminderTest();
+    Q_INVOKABLE bool scheduleNativeGeneralReminderTest();
     Q_INVOKABLE int saveReminder(const QVariantMap &values);
     Q_INVOKABLE bool deleteReminder(int reminderId);
 
@@ -181,6 +182,7 @@ private:
                                       const QString &pupilToken) const;
     QString activeAutomaticLessonName(const QVariantMap &lessonRow, const QVariantList &members) const;
     QVariantList nativeReminderSchedule() const;
+    bool scheduleNativeReminderTestForProfile(const QString &profile);
     QString buildPupilArchiveHtml(int pupilId) const;
     void importLegacySettings();
     QString legacyConfigPath() const;

@@ -45,6 +45,11 @@ id: root
     }
 
     function checkRuntimeNotifications(includeCurrentLesson) {
+        // iOS handles lesson-start/pupil reminders through UNUserNotificationCenter,
+        // including when Qupil is open. Do not duplicate native delivery here.
+        // Startup-only reminders (mode 0) still use the QML dialog below.
+        if (Qt.platform.os === "ios")
+            return
         if (nativeMobileReminders && Qt.application.state !== Qt.ApplicationActive)
             return
         const minuteKey = Qt.formatDateTime(new Date(), "yyyy-MM-dd hh:mm")
@@ -310,7 +315,10 @@ id: root
 
     Timer {
         interval: 10000
-        running: !root.nativeMobileReminders || Qt.application.state === Qt.ApplicationActive
+        // iOS lesson-time reminders are entirely system-scheduled. The QML
+        // timer remains only for desktop and Android's foreground dialog.
+        running: Qt.platform.os !== "ios"
+                 && (!root.nativeMobileReminders || Qt.application.state === Qt.ApplicationActive)
         repeat: true
         onTriggered: root.checkRuntimeNotifications(false)
     }

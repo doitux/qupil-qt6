@@ -132,7 +132,8 @@ assert ios_scheduler.index("@interface QupilNotificationDelegate") < ios_schedul
 assert ios_scheduler.index("@implementation QupilNotificationDelegate") < ios_scheduler.index("namespace {")
 assert "UNNotificationPresentationOptionAlert" not in ios_scheduler
 assert 'nativeMobileReminders: Qt.platform.os === "android" || Qt.platform.os === "ios"' in main_qml
-assert "running: !root.nativeMobileReminders || Qt.application.state === Qt.ApplicationActive" in main_qml
+assert 'running: Qt.platform.os !== "ios"' in main_qml
+assert '(!root.nativeMobileReminders || Qt.application.state === Qt.ApplicationActive)' in main_qml
 assert "enqueueNotifications(App.lessonReminders(includeCurrentLesson))" in main_qml
 assert "if (nativeMobileReminders)" in main_qml
 assert "nativeReminderSchedule() const" in app_cpp
@@ -166,7 +167,11 @@ assert ':/qt/qml/Qupil/data/sounds/reminder.wav' in ios_scheduler
 assert 'copyQtResource' in ios_scheduler and 'Library/Sounds' in ios_scheduler
 assert 'qupil-test-background' in ios_scheduler
 assert 'getPendingNotificationRequestsWithCompletionHandler' in ios_scheduler
-assert 'UIApplicationStateActive' in ios_scheduler
+# iOS lesson-time reminders are delivered by UserNotifications even in the
+# foreground; they may no longer be suppressed in favor of the QML timer.
+assert 'if (Qt.platform.os === "ios")' in main_qml
+assert 'UNNotificationPresentationOptionBanner' in ios_scheduler
+assert 'completionHandler(0)' not in ios_scheduler
 assert 'item.insert(QStringLiteral("title"), QStringLiteral("Qupil"))' in app_cpp
 assert 'item.insert(QStringLiteral("body"), tr("Lesson ending soon"))' in app_cpp
 assert 'scheduleNativeReminderTest()' in app_cpp

@@ -70,7 +70,8 @@ void qupilRequestExactAlarmPermission()
 }
 
 
-bool qupilScheduleNativeReminderTest(const QString &, int, const QString &, const QString &, QString *errorMessage)
+bool qupilScheduleNativeReminderTest(const QString &, const QString &, int,
+                                     const QString &, const QString &, QString *errorMessage)
 {
     if (errorMessage)
         *errorMessage = QStringLiteral("Native reminder test is currently only available on iOS.");

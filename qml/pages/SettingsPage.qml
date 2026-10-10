@@ -158,6 +158,16 @@ Page {
                 soundImportFailed.open()
         }
     }
+    Action {
+        id: iosGeneralTestAction
+        onTriggered: {
+            root.flushPendingWrites()
+            if (App.scheduleNativeGeneralReminderTest())
+                iosTestScheduled.open()
+            else
+                soundImportFailed.open()
+        }
+    }
     Action { id: iosDiagnosticsRefreshAction; onTriggered: App.refreshNativeReminderDiagnostics() }
 
     SettingsPageForm {
@@ -177,6 +187,7 @@ Page {
         testReminderSoundAction: testReminderSoundAction
         exactAlarmAction: exactAlarmAction
         iosBackgroundTestAction: iosBackgroundTestAction
+        iosGeneralTestAction: iosGeneralTestAction
         iosDiagnosticsRefreshAction: iosDiagnosticsRefreshAction
         nativeReminderDiagnostics: App.nativeReminderDiagnostics
 

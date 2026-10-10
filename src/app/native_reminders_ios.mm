@@ -11,9 +11,11 @@
 #include <QStringList>
 #include <QTemporaryFile>
 
+#include <algorithm>
 #include <cstdio>
 #include <cerrno>
 #include <cstring>
+#include <utility>
 #include <vector>
 #include <QVariantMap>
 
@@ -34,11 +36,9 @@
         completionHandler(UNNotificationPresentationOptionSound);
         return;
     }
-    if (UIApplication.sharedApplication.applicationState == UIApplicationStateActive) {
-        // The existing QML reminder dialog remains the foreground UI.
-        completionHandler(0);
-        return;
-    }
+    // Generic lesson-start/pupil reminders must use the same native delivery
+    // as lesson-end reminders even in the foreground. QML no longer polls
+    // these reminders on iOS, so there is no duplicate popup or sound.
     if (@available(iOS 14.0, *)) {
         completionHandler(UNNotificationPresentationOptionBanner |
                           UNNotificationPresentationOptionList |
@@ -230,11 +230,12 @@ void replaceQupilSchedule(UNUserNotificationCenter *center,
 }
 
 void addDiagnosticTestRequest(UNUserNotificationCenter *center,
+                              NSString *identifier,
                               NSString *soundName,
                               NSString *title,
                               NSString *body)
 {
-    [center removePendingNotificationRequestsWithIdentifiers:@[@"qupil-test-background"]];
+    [center removePendingNotificationRequestsWithIdentifiers:@[identifier]];
 
     UNMutableNotificationContent *content = [[UNMutableNotificationContent alloc] init];
     content.title = title;
@@ -246,14 +247,15 @@ void addDiagnosticTestRequest(UNUserNotificationCenter *center,
     UNTimeIntervalNotificationTrigger *trigger =
         [UNTimeIntervalNotificationTrigger triggerWithTimeInterval:15.0 repeats:NO];
     UNNotificationRequest *request =
-        [UNNotificationRequest requestWithIdentifier:@"qupil-test-background"
+        [UNNotificationRequest requestWithIdentifier:identifier
                                               content:content
                                               trigger:trigger];
     [center addNotificationRequest:request withCompletionHandler:^(NSError *error) {
         if (error)
             NSLog(@"Qupil iOS background reminder test scheduling failed: %@", error);
         else
-            NSLog(@"QUPIL_IOS_REMINDER_TEST scheduled=yes delay=15s sound=%@", soundName);
+            NSLog(@"QUPIL_IOS_REMINDER_TEST scheduled=yes id=%@ delay=15s sound=%@",
+                  identifier, soundName);
     }];
 }
 
@@ -441,25 +443,34 @@ bool qupilSyncNativeReminders(const QVariantList &schedule,
     return true;
 }
 
-bool qupilScheduleNativeReminderTest(const QString &lessonEndSoundPath,
-                                     int lessonEndVolume,
+bool qupilScheduleNativeReminderTest(const QString &profile,
+                                     const QString &soundPath,
+                                     int volume,
                                      const QString &title,
                                      const QString &body,
                                      QString *errorMessage)
 {
-    if (lessonEndVolume <= 0) {
+    if (profile != QStringLiteral("lessonEnd") && profile != QStringLiteral("reminder")) {
         if (errorMessage)
-            *errorMessage = QStringLiteral("Lesson end sound volume is 0.");
+            *errorMessage = QStringLiteral("Unknown notification sound profile.");
+        return false;
+    }
+    if (volume <= 0) {
+        if (errorMessage)
+            *errorMessage = QStringLiteral("Notification sound volume is 0.");
         return false;
     }
 
+    const bool lessonEnd = profile == QStringLiteral("lessonEnd");
     UNUserNotificationCenter *center = UNUserNotificationCenter.currentNotificationCenter;
     center.delegate = notificationDelegate();
     NSString *soundName = prepareNotificationSound(
-        lessonEndSoundPath,
-        @"qupil-lesson-end",
-        @"lesson-end.wav",
-        QStringLiteral(":/qt/qml/Qupil/data/sounds/lesson-end.wav"));
+        soundPath,
+        lessonEnd ? @"qupil-lesson-end" : @"qupil-reminder",
+        lessonEnd ? @"lesson-end.wav" : @"reminder.wav",
+        lessonEnd ? QStringLiteral(":/qt/qml/Qupil/data/sounds/lesson-end.wav")
+                  : QStringLiteral(":/qt/qml/Qupil/data/sounds/reminder.wav"));
+    NSString *testIdentifier = lessonEnd ? @"qupil-test-background" : @"qupil-test-reminder";
     NSString *testTitle = nsString(title);
     NSString *testBody = nsString(body);
     constexpr UNAuthorizationOptions options = UNAuthorizationOptionAlert | UNAuthorizationOptionSound;
@@ -474,11 +485,11 @@ bool qupilScheduleNativeReminderTest(const QString &lessonEndSoundPath,
                 if (error)
                     NSLog(@"Qupil notification test permission request failed: %@", error);
                 if (granted)
-                    addDiagnosticTestRequest(center, soundName, testTitle, testBody);
+                    addDiagnosticTestRequest(center, testIdentifier, soundName, testTitle, testBody);
             }];
             return;
         }
-        addDiagnosticTestRequest(center, soundName, testTitle, testBody);
+        addDiagnosticTestRequest(center, testIdentifier, soundName, testTitle, testBody);
     }];
     return true;
 }
@@ -495,7 +506,10 @@ void qupilFetchNativeReminderDiagnostics(QupilReminderDiagnosticsCallback callba
             int lessonEndCount = 0;
             int reminderCount = 0;
             int testCount = 0;
-            QStringList nextRequests;
+            // Sort by actual next delivery, not by the notification center's
+            // arbitrary request enumeration order. Display whether each
+            // request has a sound configured for device-side diagnostics.
+            std::vector<std::pair<double, QString>> upcomingRequests;
 
             NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
             formatter.locale = [[NSLocale alloc] initWithLocaleIdentifier:@"en_US_POSIX"];
@@ -512,17 +526,24 @@ void qupilFetchNativeReminderDiagnostics(QupilReminderDiagnosticsCallback callba
                 else if ([request.identifier hasPrefix:@"qupil-test-"])
                     ++testCount;
 
-                if (nextRequests.size() < 8) {
-                    NSDate *nextDate = nil;
-                    if ([request.trigger isKindOfClass:[UNCalendarNotificationTrigger class]])
-                        nextDate = ((UNCalendarNotificationTrigger *)request.trigger).nextTriggerDate;
-                    else if ([request.trigger isKindOfClass:[UNTimeIntervalNotificationTrigger class]])
-                        nextDate = ((UNTimeIntervalNotificationTrigger *)request.trigger).nextTriggerDate;
-                    const QString when = nextDate ? qtString([formatter stringFromDate:nextDate]) : QStringLiteral("?");
-                    nextRequests << QStringLiteral("%1 @ %2")
-                                        .arg(qtString(request.identifier), when);
+                NSDate *nextDate = nil;
+                if ([request.trigger isKindOfClass:[UNCalendarNotificationTrigger class]])
+                    nextDate = ((UNCalendarNotificationTrigger *)request.trigger).nextTriggerDate;
+                else if ([request.trigger isKindOfClass:[UNTimeIntervalNotificationTrigger class]])
+                    nextDate = ((UNTimeIntervalNotificationTrigger *)request.trigger).nextTriggerDate;
+                if (nextDate) {
+                    const QString when = qtString([formatter stringFromDate:nextDate]);
+                    const QString sound = request.content.sound ? QStringLiteral("yes") : QStringLiteral("no");
+                    upcomingRequests.emplace_back(nextDate.timeIntervalSince1970,
+                        QStringLiteral("%1 @ %2 sound=%3")
+                            .arg(qtString(request.identifier), when, sound));
                 }
             }
+            std::sort(upcomingRequests.begin(), upcomingRequests.end(),
+                      [](const auto &a, const auto &b) { return a.first < b.first; });
+            QStringList nextRequests;
+            for (size_t i = 0; i < upcomingRequests.size() && i < 12; ++i)
+                nextRequests << upcomingRequests[i].second;
 
             NSURL *sounds = notificationSoundsDirectory();
             NSFileManager *fm = NSFileManager.defaultManager;
